@@ -149,6 +149,7 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 				_, err = readDisks[index].ReadFileWithVerify(
 					volume, path, blockOffset, buf,
 					brVerifiers[index].algo,
+					brVerifiers[index].key,
 					brVerifiers[index].checkSum)
 			} else {
 				_, err = readDisks[index].ReadFile(volume, path,
@@ -184,7 +185,7 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 // detection by verifying checksum of individual block's checksum.
 func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	offset, length, totalLength, blockSize int64, dataBlocks, parityBlocks int,
-	checkSums []string, algo HashAlgo, pool *bpool.BytePool) (int64, error) {
+	checkSums, keys []string, algo BitRotHashAlgorithm, pool *bpool.BytePool) (int64, error) {
 
 	// Offset and length cannot be negative.
 	if offset < 0 || length < 0 {
@@ -204,6 +205,7 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	for i := range brVerifiers {
 		brVerifiers[i].algo = algo
 		brVerifiers[i].checkSum = checkSums[i]
+		brVerifiers[i].key = keys[i]
 	}
 
 	// Total bytes written to writer

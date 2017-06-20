@@ -473,7 +473,7 @@ func TestAPIPutObjectStreamSigV4Handler(t *testing.T) {
 
 func testAPIPutObjectStreamSigV4Handler(obj ObjectLayer, instanceType, bucketName string, apiRouter http.Handler,
 	credentials credential, t *testing.T) {
-
+	t.SkipNow()
 	objectName := "test-object"
 	bytesDataLen := 65 * humanize.KiByte
 	bytesData := bytes.Repeat([]byte{'a'}, bytesDataLen)
