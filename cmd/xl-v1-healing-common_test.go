@@ -378,7 +378,7 @@ func TestDisksWithAllParts(t *testing.T) {
 	for diskIndex, partName := range diskFailures {
 		for index, info := range partsMetadata[diskIndex].Erasure.Checksum {
 			if info.Name == partName {
-				partsMetadata[diskIndex].Erasure.Checksum[index].Algorithm = HashSha256
+				partsMetadata[diskIndex].Erasure.Checksum[index].Algorithm = Sha256
 			}
 		}
 	}

@@ -1053,7 +1053,7 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		fileName     string
 		offset       int64
 		bufSize      int
-		algo         HashAlgo
+		algo         BitRotHashAlgorithm
 		expectedHash string
 
 		expectedBuf []byte
@@ -1062,33 +1062,33 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		// Hash verification is skipped with empty expected
 		// hash - 1
 		{
-			"myobject", 0, 5, HashBlake2b, "",
+			"myobject", 0, 5, Blake2b, "",
 			[]byte("Hello"), nil,
 		},
 		// Hash verification failure case - 2
 		{
-			"myobject", 0, 5, HashBlake2b, "a",
+			"myobject", 0, 5, Blake2b, "a",
 			[]byte(""),
 			hashMismatchError{"a", blakeHash("Hello, world!")},
 		},
 		// Hash verification success with full content requested - 3
 		{
-			"myobject", 0, 13, HashBlake2b, blakeHash("Hello, world!"),
+			"myobject", 0, 13, Blake2b, blakeHash("Hello, world!"),
 			[]byte("Hello, world!"), nil,
 		},
 		// Hash verification success with full content and Sha256 - 4
 		{
-			"myobject", 0, 13, HashSha256, sha256Hash("Hello, world!"),
+			"myobject", 0, 13, Sha256, sha256Hash("Hello, world!"),
 			[]byte("Hello, world!"), nil,
 		},
 		// Hash verification success with partial content requested - 5
 		{
-			"myobject", 7, 4, HashBlake2b, blakeHash("Hello, world!"),
+			"myobject", 7, 4, Blake2b, blakeHash("Hello, world!"),
 			[]byte("worl"), nil,
 		},
 		// Hash verification success with partial content and Sha256 - 6
 		{
-			"myobject", 7, 4, HashSha256, sha256Hash("Hello, world!"),
+			"myobject", 7, 4, Sha256, sha256Hash("Hello, world!"),
 			[]byte("worl"), nil,
 		},
 		// Empty hash-algo returns error - 7
@@ -1115,7 +1115,7 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		var n int64
 		// Common read buffer.
 		var buf = make([]byte, testCase.bufSize)
-		n, err = posixStorage.ReadFileWithVerify(volume, testCase.fileName, testCase.offset, buf, testCase.algo, testCase.expectedHash)
+		n, err = posixStorage.ReadFileWithVerify(volume, testCase.fileName, testCase.offset, buf, testCase.algo, "", testCase.expectedHash)
 
 		switch {
 		case err == nil && testCase.expectedErr != nil:

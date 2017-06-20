@@ -19,7 +19,6 @@ package cmd
 import (
 	"bytes"
 	"encoding/hex"
-	"hash"
 	"io"
 	"io/ioutil"
 	"os"
@@ -522,7 +521,7 @@ func (s *posix) ReadAll(volume, path string) (buf []byte, err error) {
 // semantics are same as io.ReadFull.
 func (s *posix) ReadFile(volume, path string, offset int64, buf []byte) (n int64, err error) {
 
-	return s.ReadFileWithVerify(volume, path, offset, buf, "", "")
+	return s.ReadFileWithVerify(volume, path, offset, buf, "", "", "")
 }
 
 // ReadFileWithVerify is the same as ReadFile but with hashsum
@@ -536,7 +535,7 @@ func (s *posix) ReadFile(volume, path string, offset int64, buf []byte) (n int64
 // The function takes care to minimize the number of disk read
 // operations.
 func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte,
-	algo HashAlgo, expectedHash string) (n int64, err error) {
+	alg BitRotHashAlgorithm, hashkey, expectedHash string) (n int64, err error) {
 
 	defer func() {
 		if err == syscall.EIO {
@@ -601,18 +600,23 @@ func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte
 	// If expected hash string is empty hash verification is
 	// skipped.
 	needToHash := expectedHash != ""
-	var hasher hash.Hash
+	var hasher BitRotHash
 
 	if needToHash {
 		// If the hashing algo is invalid, return an error.
-		if !isValidHashAlgo(algo) {
+		if !alg.IsValid() {
 			return 0, errBitrotHashAlgoInvalid
+		}
+
+		key, dErr := hex.DecodeString(hashkey)
+		if dErr != nil {
+			return 0, dErr
 		}
 
 		// Compute hash of object from start to the byte at
 		// (offset - 1), and as a result of this read, seek to
 		// `offset`.
-		hasher = newHash(algo)
+		hasher = NewBitRotHash(alg, key)
 		if offset > 0 {
 			_, err = io.CopyN(hasher, file, offset)
 			if err != nil {

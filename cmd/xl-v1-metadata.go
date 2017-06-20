@@ -20,16 +20,18 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
-	"runtime"
 	"sort"
 	"sync"
 	"time"
 )
 
 const (
-	// Erasure related constants.
-	erasureAlgorithmKlauspost = "klauspost/reedsolomon/vandermonde"
+	// erasure-coding algorithms
+	erasureAlgorithmKlauspost ErasureAlgorithm = "klauspost/reedsolomon/vandermonde"
 )
+
+// ErasureAlgorithm specifies an algorithm which can be used to reconstruct lost data.
+type ErasureAlgorithm string
 
 // objectPartInfo Info of each part kept in the multipart metadata
 // file after CompleteMultipartUpload() is called.
@@ -49,67 +51,22 @@ func (t byObjectPartNumber) Less(i, j int) bool { return t[i].Number < t[j].Numb
 
 // checkSumInfo - carries checksums of individual scattered parts per disk.
 type checkSumInfo struct {
-	Name      string   `json:"name"`
-	Algorithm HashAlgo `json:"algorithm"`
-	Hash      string   `json:"hash"`
-}
-
-// HashAlgo - represents a supported hashing algorithm for bitrot
-// verification.
-type HashAlgo string
-
-const (
-	// HashBlake2b represents the Blake 2b hashing algorithm
-	HashBlake2b HashAlgo = "blake2b"
-	// HashSha256 represents the SHA256 hashing algorithm
-	HashSha256 HashAlgo = "sha256"
-)
-
-// isValidHashAlgo - function that checks if the hash algorithm is
-// valid (known and used).
-func isValidHashAlgo(algo HashAlgo) bool {
-	switch algo {
-	case HashSha256, HashBlake2b:
-		return true
-	default:
-		return false
-	}
-}
-
-// Constant indicates current bit-rot algo used when creating objects.
-// Depending on the architecture we are choosing a different checksum.
-var bitRotAlgo = getDefaultBitRotAlgo()
-
-// Get the default bit-rot algo depending on the architecture.
-// Currently this function defaults to "blake2b" as the preferred
-// checksum algorithm on all architectures except ARM64. On ARM64
-// we use sha256 (optimized using sha2 instructions of ARM NEON chip).
-func getDefaultBitRotAlgo() HashAlgo {
-	switch runtime.GOARCH {
-	case "arm64":
-		// As a special case for ARM64 we use an optimized
-		// version of hash i.e sha256. This is done so that
-		// blake2b is sub-optimal and slower on ARM64.
-		// This would also allows erasure coded writes
-		// on ARM64 servers to be on-par with their
-		// counter-part X86_64 servers.
-		return HashSha256
-	default:
-		// Default for all other architectures we use blake2b.
-		return HashBlake2b
-	}
+	Name      string              `json:"name"`
+	Algorithm BitRotHashAlgorithm `json:"algorithm"`
+	Hash      string              `json:"hash"`
+	Key       string              `json:"key"`
 }
 
 // erasureInfo - carries erasure coding related information, block
 // distribution and checksums.
 type erasureInfo struct {
-	Algorithm    HashAlgo       `json:"algorithm"`
-	DataBlocks   int            `json:"data"`
-	ParityBlocks int            `json:"parity"`
-	BlockSize    int64          `json:"blockSize"`
-	Index        int            `json:"index"`
-	Distribution []int          `json:"distribution"`
-	Checksum     []checkSumInfo `json:"checksum,omitempty"`
+	Algorithm    ErasureAlgorithm `json:"algorithm"`
+	DataBlocks   int              `json:"data"`
+	ParityBlocks int              `json:"parity"`
+	BlockSize    int64            `json:"blockSize"`
+	Index        int              `json:"index"`
+	Distribution []int            `json:"distribution"`
+	Checksum     []checkSumInfo   `json:"checksum,omitempty"`
 }
 
 // AddCheckSum - add checksum of a part.
@@ -131,7 +88,7 @@ func (e erasureInfo) GetCheckSumInfo(partName string) (ckSum checkSumInfo) {
 			return sum
 		}
 	}
-	return checkSumInfo{Algorithm: bitRotAlgo}
+	return checkSumInfo{Algorithm: DefaultBitRotHashAlgorithm}
 }
 
 // statInfo - carries stat information of the object.
@@ -140,11 +97,25 @@ type statInfo struct {
 	ModTime time.Time `json:"modTime"` // ModTime of the object `xl.json`.
 }
 
+// EncryptionConfig holds the information for en/decryption an object.
+type EncryptionConfig struct {
+	// The encryption algorithm specified by the user in the request
+	Algorithm string `json:"algorithm"`
+	// The encryption algorithm used internal to encrypt objects (my be equal to Algorithm)
+	Cipher string `json:"cipher"`
+	// The HMAC / hash value of the key - used to verify that the client provides a correct key
+	HMAC string `json:"hamc"`
+	// The MD5 hash of the key - repleyed to the user in responses
+	MD5 string `json:"md5"`
+}
+
 // A xlMetaV1 represents `xl.json` metadata header.
 type xlMetaV1 struct {
 	Version string   `json:"version"` // Version of the current `xl.json`.
 	Format  string   `json:"format"`  // Format of the current `xl.json`.
 	Stat    statInfo `json:"stat"`    // Stat of the current object `xl.json`.
+	// The encryption configuration used to en/decrypt the object
+	Encryption EncryptionConfig `json:"encryption"`
 	// Erasure coded info for the current object `xl.json`.
 	Erasure erasureInfo `json:"erasure"`
 	// Minio release tag for current object `xl.json`.

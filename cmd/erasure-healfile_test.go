@@ -22,12 +22,39 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
+
+	"encoding/binary"
 
 	humanize "github.com/dustin/go-humanize"
 )
 
+type seededRand struct {
+	val [8]byte
+}
+
+func (s seededRand) Read(p []byte) (n int, err error) {
+	n = len(p)
+	for len(p) > 0 {
+		nn := 8
+		if len(p) < 8 {
+			nn = len(p)
+		}
+		copy(p, s.val[:nn])
+		p = p[nn:]
+	}
+	return
+}
+
 // Test erasureHealFile()
 func TestErasureHealFile(t *testing.T) {
+	// make rand.Reader a seeded entropy source
+	cryptoReader := rand.Reader
+	var val [8]byte
+	binary.LittleEndian.PutUint64(val[:], uint64(time.Now().Unix()))
+	rand.Reader = seededRand{}
+	defer func() { rand.Reader = cryptoReader }()
+
 	// Initialize environment needed for the test.
 	dataBlocks := 7
 	parityBlocks := 7
@@ -48,12 +75,12 @@ func TestErasureHealFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create a test file.
-	_, size, checkSums, err := erasureCreateFile(disks, "testbucket", "testobject1", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, bitRotAlgo, dataBlocks+1)
+	result, err := erasureCreateFile(disks, "testbucket", "testobject1", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, DefaultBitRotHashAlgorithm, dataBlocks+1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if size != int64(len(data)) {
-		t.Errorf("erasureCreateFile returned %d, expected %d", size, len(data))
+	if result.size != int64(len(data)) {
+		t.Errorf("erasureCreateFile returned %d, expected %d", result.size, len(data))
 	}
 
 	latest := make([]StorageAPI, len(disks))   // Slice of latest disks
@@ -69,13 +96,13 @@ func TestErasureHealFile(t *testing.T) {
 	latest[0] = nil
 	outDated[0] = disks[0]
 
-	healCheckSums, err := erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, bitRotAlgo)
+	healCheckSums, _, err := erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, DefaultBitRotHashAlgorithm)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Checksum of the healed file should match.
-	if checkSums[0] != healCheckSums[0] {
-		t.Error("Healing failed, data does not match.")
+	if result.hashes[0] != healCheckSums[0] {
+		t.Errorf("Healing failed, data does not match - Seed: %v\n", rand.Reader)
 	}
 
 	// Test case when parityBlocks number of disks need to be healed.
@@ -92,15 +119,15 @@ func TestErasureHealFile(t *testing.T) {
 		outDated[index] = disks[index]
 	}
 
-	healCheckSums, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, bitRotAlgo)
+	healCheckSums, _, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, DefaultBitRotHashAlgorithm)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Checksums of the healed files should match.
 	for index := 0; index < parityBlocks; index++ {
-		if checkSums[index] != healCheckSums[index] {
-			t.Error("Healing failed, data does not match.")
+		if result.hashes[index] != healCheckSums[index] {
+			t.Errorf("Healing failed, data does not match - Seed: %v\n", rand.Reader)
 		}
 	}
 	for index := dataBlocks; index < len(disks); index++ {
@@ -122,7 +149,7 @@ func TestErasureHealFile(t *testing.T) {
 		latest[index] = nil
 		outDated[index] = disks[index]
 	}
-	_, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, bitRotAlgo)
+	_, _, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, DefaultBitRotHashAlgorithm)
 	if err == nil {
 		t.Error("Expected erasureHealFile() to fail when the number of available disks <= parityBlocks")
 	}

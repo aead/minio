@@ -17,33 +17,51 @@
 package cmd
 
 import (
+	"crypto/rand"
 	"encoding/hex"
-	"hash"
 	"io"
 	"sync"
 
 	"github.com/klauspost/reedsolomon"
 )
 
+// ErasureCreateResult is the result of a successful erasureCreateFile operation.
+type ErasureCreateResult struct {
+	size         int64
+	hashes, keys []string
+}
+
 // erasureCreateFile - writes an entire stream by erasure coding to
 // all the disks, writes also calculate individual block's checksum
 // for future bit-rot protection.
 func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader, allowEmpty bool, blockSize int64,
-	dataBlocks, parityBlocks int, algo HashAlgo, writeQuorum int) (newDisks []StorageAPI, bytesWritten int64, checkSums []string, err error) {
+	dataBlocks, parityBlocks int, alg BitRotHashAlgorithm, writeQuorum int) (res ErasureCreateResult, err error) {
 
 	// Allocated blockSized buffer for reading from incoming stream.
 	buf := make([]byte, blockSize)
 
-	hashWriters := newHashWriters(len(disks), algo)
+	key := make([]byte, alg.KeySize())
+	hasher := make([]BitRotHash, len(disks))
+	for i := range hasher {
+		if alg.RequireKey() {
+			_, err = io.ReadFull(rand.Reader, key)
+			if err != nil {
+				return
+			}
+		}
+		hasher[i] = NewBitRotHash(alg, key)
+	}
 
 	// Read until io.EOF, erasure codes data and writes to all disks.
+	var bytesWritten int64
 	for {
 		var blocks [][]byte
 		n, rErr := io.ReadFull(reader, buf)
 		// FIXME: this is a bug in Golang, n == 0 and err ==
 		// io.ErrUnexpectedEOF for io.ReadFull function.
-		if n == 0 && rErr == io.ErrUnexpectedEOF {
-			return nil, 0, nil, traceError(rErr)
+		if n == 0 && err == io.ErrUnexpectedEOF {
+			err = traceError(rErr)
+			return
 		}
 		if rErr == io.EOF {
 			// We have reached EOF on the first byte read, io.Reader
@@ -51,38 +69,44 @@ func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader
 			// data. Will create a 0byte file instead.
 			if bytesWritten == 0 && allowEmpty {
 				blocks = make([][]byte, len(disks))
-				newDisks, rErr = appendFile(disks, volume, path, blocks, hashWriters, writeQuorum)
-				if rErr != nil {
-					return nil, 0, nil, rErr
+				_, err = appendFile(disks, volume, path, blocks, hasher, writeQuorum)
+				if err != nil {
+					return
 				}
 			} // else we have reached EOF after few reads, no need to
 			// add an additional 0bytes at the end.
 			break
 		}
 		if rErr != nil && rErr != io.ErrUnexpectedEOF {
-			return nil, 0, nil, traceError(rErr)
+			err = traceError(rErr)
+			return
 		}
 		if n > 0 {
 			// Returns encoded blocks.
-			var enErr error
-			blocks, enErr = encodeData(buf[0:n], dataBlocks, parityBlocks)
-			if enErr != nil {
-				return nil, 0, nil, enErr
+			blocks, err = encodeData(buf[0:n], dataBlocks, parityBlocks)
+			if err != nil {
+				return
 			}
 
 			// Write to all disks.
-			if newDisks, err = appendFile(disks, volume, path, blocks, hashWriters, writeQuorum); err != nil {
-				return nil, 0, nil, err
+			_, err = appendFile(disks, volume, path, blocks, hasher, writeQuorum)
+			if err != nil {
+				return
 			}
 			bytesWritten += int64(n)
 		}
 	}
 
-	checkSums = make([]string, len(disks))
-	for i := range checkSums {
-		checkSums[i] = hex.EncodeToString(hashWriters[i].Sum(nil))
+	res.size = bytesWritten
+	res.hashes = make([]string, len(disks))
+	res.keys = make([]string, len(disks))
+	for i := range res.hashes {
+		res.hashes[i] = hex.EncodeToString(hasher[i].Sum(nil))
+		if key, ok := hasher[i].Key(); ok {
+			res.keys[i] = hex.EncodeToString(key)
+		}
 	}
-	return newDisks, bytesWritten, checkSums, nil
+	return
 }
 
 // encodeData - encodes incoming data buffer into
@@ -110,7 +134,7 @@ func encodeData(dataBuffer []byte, dataBlocks, parityBlocks int) ([][]byte, erro
 }
 
 // appendFile - append data buffer at path.
-func appendFile(disks []StorageAPI, volume, path string, enBlocks [][]byte, hashWriters []hash.Hash, writeQuorum int) ([]StorageAPI, error) {
+func appendFile(disks []StorageAPI, volume, path string, enBlocks [][]byte, hashWriters []BitRotHash, writeQuorum int) ([]StorageAPI, error) {
 	var wg = &sync.WaitGroup{}
 	var wErrs = make([]error, len(disks))
 	// Write encoded data to quorum disks in parallel.

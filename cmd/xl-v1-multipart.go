@@ -643,7 +643,6 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 
 	// Delete the temporary object part. If PutObjectPart succeeds there would be nothing to delete.
 	defer xl.deleteObject(minioMetaTmpBucket, tmpPart)
-
 	if size > 0 {
 		if pErr := xl.prepareFile(minioMetaTmpBucket, tmpPartPath, size, onlineDisks, xlMeta.Erasure.BlockSize, xlMeta.Erasure.DataBlocks); err != nil {
 			return PartInfo{}, toObjectErr(pErr, bucket, object)
@@ -655,21 +654,21 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 	allowEmpty := true
 
 	// Erasure code data and write across all disks.
-	onlineDisks, sizeWritten, checkSums, err := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tmpPartPath, teeReader, allowEmpty, xlMeta.Erasure.BlockSize, xl.dataBlocks, xl.parityBlocks, bitRotAlgo, xl.writeQuorum)
+	result, err := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tmpPartPath, teeReader, allowEmpty, xlMeta.Erasure.BlockSize, xl.dataBlocks, xl.parityBlocks, DefaultBitRotHashAlgorithm, xl.writeQuorum)
 	if err != nil {
 		return PartInfo{}, toObjectErr(err, bucket, object)
 	}
 
 	// Should return IncompleteBody{} error when reader has fewer bytes
 	// than specified in request header.
-	if sizeWritten < size {
+	if result.size < size {
 		return PartInfo{}, traceError(IncompleteBody{})
 	}
 
 	// For size == -1, perhaps client is sending in chunked encoding
 	// set the size as size that was actually written.
 	if size == -1 {
-		size = sizeWritten
+		size = result.size
 	}
 
 	// Calculate new md5sum.
@@ -727,15 +726,16 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 	// Add the current part.
 	xlMeta.AddObjectPart(partID, partSuffix, newMD5Hex, size)
 
-	for index, disk := range onlineDisks {
+	for i, disk := range onlineDisks {
 		if disk == nil {
 			continue
 		}
-		partsMetadata[index].Parts = xlMeta.Parts
-		partsMetadata[index].Erasure.AddCheckSumInfo(checkSumInfo{
+		partsMetadata[i].Parts = xlMeta.Parts
+		partsMetadata[i].Erasure.AddCheckSumInfo(checkSumInfo{
 			Name:      partSuffix,
-			Hash:      checkSums[index],
-			Algorithm: bitRotAlgo,
+			Hash:      result.hashes[i],
+			Algorithm: DefaultBitRotHashAlgorithm,
+			Key:       result.keys[i],
 		})
 	}
 

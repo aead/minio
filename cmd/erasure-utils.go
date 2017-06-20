@@ -19,46 +19,11 @@ package cmd
 import (
 	"bytes"
 	"errors"
-	"hash"
 	"io"
 	"sync"
 
 	"github.com/klauspost/reedsolomon"
-	"github.com/minio/sha256-simd"
-	"golang.org/x/crypto/blake2b"
 )
-
-// newHashWriters - inititialize a slice of hashes for the disk count.
-func newHashWriters(diskCount int, algo HashAlgo) []hash.Hash {
-	hashWriters := make([]hash.Hash, diskCount)
-	for index := range hashWriters {
-		hashWriters[index] = newHash(algo)
-	}
-	return hashWriters
-}
-
-// newHash - gives you a newly allocated hash depending on the input algorithm.
-func newHash(algo HashAlgo) (h hash.Hash) {
-	switch algo {
-	case HashSha256:
-		// sha256 checksum specially on ARM64 platforms or whenever
-		// requested as dictated by `xl.json` entry.
-		h = sha256.New()
-	case HashBlake2b:
-		// ignore the error, because New512 without a key never fails
-		// New512 only returns a non-nil error, if the length of the passed
-		// key > 64 bytes - but we use blake2b as hash function (no key)
-		h, _ = blake2b.New512(nil)
-	// Add new hashes here.
-	default:
-		// Default to blake2b.
-		// ignore the error, because New512 without a key never fails
-		// New512 only returns a non-nil error, if the length of the passed
-		// key > 64 bytes - but we use blake2b as hash function (no key)
-		h, _ = blake2b.New512(nil)
-	}
-	return h
-}
 
 // Hash buffer pool is a pool of reusable
 // buffers used while checksumming a stream.
@@ -70,7 +35,7 @@ var hashBufferPool = sync.Pool{
 }
 
 // hashSum calculates the hash of the entire path and returns.
-func hashSum(disk StorageAPI, volume, path string, writer hash.Hash) ([]byte, error) {
+func hashSum(disk StorageAPI, volume, path string, writer BitRotHash) ([]byte, error) {
 	// Fetch a new staging buffer from the pool.
 	bufp := hashBufferPool.Get().(*[]byte)
 	defer hashBufferPool.Put(bufp)
@@ -216,7 +181,9 @@ type bitRotVerifier struct {
 	// is the data free of bit-rot?
 	hasBitRot bool
 	// hashing algorithm
-	algo HashAlgo
+	algo BitRotHashAlgorithm
 	// hex-encoded expected raw-hash value
 	checkSum string
+	// key for algorithms which requires a key
+	key string
 }

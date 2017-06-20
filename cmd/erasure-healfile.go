@@ -16,18 +16,31 @@
 
 package cmd
 
-import "encoding/hex"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"io"
+)
 
 // Heals the erasure coded file. reedsolomon.Reconstruct() is used to reconstruct the missing parts.
 func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volume, path, healBucket, healPath string,
-	size, blockSize int64, dataBlocks, parityBlocks int, algo HashAlgo) (checkSums []string, err error) {
+	size, blockSize int64, dataBlocks, parityBlocks int, alg BitRotHashAlgorithm) (checkSums, keys []string, err error) {
 
 	var offset int64
 	remainingSize := size
 
 	// Hash for bitrot protection.
-	hashWriters := newHashWriters(len(outDatedDisks), bitRotAlgo)
-
+	key := make([]byte, alg.KeySize())
+	hasher := make([]BitRotHash, len(outDatedDisks))
+	for i := range hasher {
+		if alg.RequireKey() {
+			_, err = io.ReadFull(rand.Reader, key)
+			if err != nil {
+				return
+			}
+		}
+		hasher[i] = NewBitRotHash(alg, key)
+	}
 	for remainingSize > 0 {
 		curBlockSize := blockSize
 		if remainingSize < curBlockSize {
@@ -56,19 +69,19 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 		// Reconstruct missing data.
 		err := decodeData(enBlocks, dataBlocks, parityBlocks)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Write to the healPath file.
-		for index, disk := range outDatedDisks {
+		for i, disk := range outDatedDisks {
 			if disk == nil {
 				continue
 			}
-			err := disk.AppendFile(healBucket, healPath, enBlocks[index])
+			err := disk.AppendFile(healBucket, healPath, enBlocks[i])
 			if err != nil {
-				return nil, traceError(err)
+				return nil, nil, traceError(err)
 			}
-			hashWriters[index].Write(enBlocks[index])
+			hasher[i].Write(enBlocks[i])
 		}
 		remainingSize -= curBlockSize
 		offset += curEncBlockSize
@@ -76,11 +89,15 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 
 	// Checksums for the bit rot.
 	checkSums = make([]string, len(outDatedDisks))
-	for index, disk := range outDatedDisks {
+	keys = make([]string, len(outDatedDisks))
+	for i, disk := range outDatedDisks {
 		if disk == nil {
 			continue
 		}
-		checkSums[index] = hex.EncodeToString(hashWriters[index].Sum(nil))
+		checkSums[i] = hex.EncodeToString(hasher[i].Sum(nil))
+		if key, ok := hasher[i].Key(); ok {
+			keys[i] = hex.EncodeToString(key)
+		}
 	}
-	return checkSums, nil
+	return checkSums, keys, nil
 }

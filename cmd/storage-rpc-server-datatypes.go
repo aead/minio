@@ -79,7 +79,9 @@ type ReadFileWithVerifyArgs struct {
 	Buffer []byte
 
 	// Algorithm used in bit-rot hash computation.
-	Algo HashAlgo
+	Algo BitRotHashAlgorithm
+
+	Key string
 
 	// Stored hash value (hex-encoded) used to compare with
 	// computed value.

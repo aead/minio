@@ -123,12 +123,12 @@ func (d *naughtyDisk) ReadFile(volume string, path string, offset int64, buf []b
 }
 
 func (d *naughtyDisk) ReadFileWithVerify(volume, path string, offset int64,
-	buf []byte, algo HashAlgo, expectedHash string) (n int64, err error) {
+	buf []byte, algo BitRotHashAlgorithm, key, expectedHash string) (n int64, err error) {
 
 	if err := d.calcError(); err != nil {
 		return 0, err
 	}
-	return d.disk.ReadFileWithVerify(volume, path, offset, buf, algo, expectedHash)
+	return d.disk.ReadFileWithVerify(volume, path, offset, buf, algo, key, expectedHash)
 }
 
 func (d *naughtyDisk) PrepareFile(volume, path string, length int64) error {
