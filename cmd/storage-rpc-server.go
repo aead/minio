@@ -22,6 +22,8 @@ import (
 	"path"
 	"time"
 
+	"encoding/hex"
+
 	router "github.com/gorilla/mux"
 	"github.com/minio/minio/pkg/disk"
 )
@@ -167,8 +169,15 @@ func (s *storageServer) ReadFileWithVerifyHandler(args *ReadFileWithVerifyArgs, 
 	}
 
 	var n int64
-	n, err = s.storage.ReadFileWithVerify(args.Vol, args.Path, args.Offset, args.Buffer,
-		args.Algo, args.ExpectedHash)
+	sum, err := hex.DecodeString(args.ExpectedHash)
+	if err != nil {
+		return err
+	}
+	key, err := hex.DecodeString(args.Key)
+	if err != nil {
+		return err
+	}
+	n, err = s.storage.ReadFileWithVerify(args.Vol, args.Path, args.Offset, args.Buffer, &BitrotInfo{args.Algo, key, sum})
 	// Sending an error over the rpc layer, would cause unmarshalling to fail. In situations
 	// when we have short read i.e `io.ErrUnexpectedEOF` treat it as good condition and copy
 	// the buffer properly.

@@ -269,7 +269,14 @@ func disksWithAllParts(onlineDisks []StorageAPI, partsMetadata []xlMetaV1, errs 
 			if err != nil {
 				return nil, nil, err
 			}
-			hash := newHash(alg)
+			key, err := hex.DecodeString(checkSumInfo.Key)
+			if err != nil {
+				return nil, nil, err
+			}
+			hash, err := alg.New(key, bitrot.Verify)
+			if err != nil {
+				return nil, nil, err
+			}
 			blakeBytes, hErr := hashSum(onlineDisk, bucket, partPath, hash)
 			if hErr == errFileNotFound {
 				errs[diskIndex] = errFileNotFound

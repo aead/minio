@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -392,13 +391,13 @@ func (s *TestRPCStorageSuite) testRPCStorageFileOps(t *testing.T) {
 			t.Errorf("Expected %s, got %s", string(buf[4:9]), string(buf1))
 		}
 
-		blakeHash := func(s string) string {
+		blakeHash := func(s string) []byte {
 			k := blake2b.Sum512([]byte(s))
-			return hex.EncodeToString(k[:])
+			return k[:]
 		}
 		buf2 := make([]byte, 2)
 		n, err = storageDisk.ReadFileWithVerify("myvol", "file1", 1,
-			buf2, bitrot.BLAKE2b512, blakeHash(string(buf)))
+			buf2, &BitrotInfo{bitrot.BLAKE2b512, nil, blakeHash(string(buf))})
 		if err != nil {
 			t.Error("Error in ReadFileWithVerify", err)
 		}

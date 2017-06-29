@@ -35,6 +35,21 @@ func newHashWriters(diskCount int, algo bitrot.Algorithm) []bitrot.Hash {
 	return hashWriters
 }
 
+func newBitrotProtection(num int, algorithm bitrot.Algorithm, random io.Reader) (keys [][]byte, hasher []bitrot.Hash, err error) {
+	keys, hasher = make([][]byte, num), make([]bitrot.Hash, num)
+	for i := range keys {
+		keys[i], err = algorithm.GenerateKey(random)
+		if err != nil {
+			return
+		}
+		hasher[i], err = algorithm.New(keys[i], bitrot.Protect)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
 // newHash - gives you a newly allocated hash depending on the input algorithm.
 func newHash(algo bitrot.Algorithm) (h bitrot.Hash) {
 	h, _ = algo.New(nil, bitrot.Protect) // the mode is only necessary for ciphers, so it doesn't matter which mode we pass
@@ -198,6 +213,8 @@ type bitRotVerifier struct {
 	hasBitRot bool
 	// hashing algorithm
 	algo bitrot.Algorithm
+	key  string
+
 	// hex-encoded expected raw-hash value
 	checkSum string
 }

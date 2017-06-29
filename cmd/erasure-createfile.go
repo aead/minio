@@ -17,6 +17,7 @@
 package cmd
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"io"
 	"sync"
@@ -29,21 +30,26 @@ import (
 // all the disks, writes also calculate individual block's checksum
 // for future bit-rot protection.
 func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader, allowEmpty bool, blockSize int64,
-	dataBlocks, parityBlocks int, algo bitrot.Algorithm, writeQuorum int) (newDisks []StorageAPI, bytesWritten int64, checkSums []string, err error) {
+	dataBlocks, parityBlocks int, algo bitrot.Algorithm, writeQuorum int) (f ErasureFileInfo, err error) {
 
 	// Allocated blockSized buffer for reading from incoming stream.
 	buf := make([]byte, blockSize)
 
-	hashWriters := newHashWriters(len(disks), algo)
+	binKeys, hashWriters, err := newBitrotProtection(len(disks), algo, rand.Reader)
+	if err != nil {
+		return
+	}
 
 	// Read until io.EOF, erasure codes data and writes to all disks.
+	var newDisks []StorageAPI
+	var bytesWritten int64
 	for {
 		var blocks [][]byte
 		n, rErr := io.ReadFull(reader, buf)
 		// FIXME: this is a bug in Golang, n == 0 and err ==
 		// io.ErrUnexpectedEOF for io.ReadFull function.
 		if n == 0 && rErr == io.ErrUnexpectedEOF {
-			return nil, 0, nil, traceError(rErr)
+			return f, traceError(rErr)
 		}
 		if rErr == io.EOF {
 			// We have reached EOF on the first byte read, io.Reader
@@ -51,38 +57,44 @@ func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader
 			// data. Will create a 0byte file instead.
 			if bytesWritten == 0 && allowEmpty {
 				blocks = make([][]byte, len(disks))
-				newDisks, rErr = appendFile(disks, volume, path, blocks, hashWriters, writeQuorum)
-				if rErr != nil {
-					return nil, 0, nil, rErr
+				newDisks, err = appendFile(disks, volume, path, blocks, hashWriters, writeQuorum)
+				if err != nil {
+					return
 				}
 			} // else we have reached EOF after few reads, no need to
 			// add an additional 0bytes at the end.
 			break
 		}
 		if rErr != nil && rErr != io.ErrUnexpectedEOF {
-			return nil, 0, nil, traceError(rErr)
+			return f, traceError(rErr)
 		}
 		if n > 0 {
 			// Returns encoded blocks.
 			var enErr error
 			blocks, enErr = encodeData(buf[0:n], dataBlocks, parityBlocks)
 			if enErr != nil {
-				return nil, 0, nil, enErr
+				return f, enErr
 			}
 
 			// Write to all disks.
 			if newDisks, err = appendFile(disks, volume, path, blocks, hashWriters, writeQuorum); err != nil {
-				return nil, 0, nil, err
+				return
 			}
 			bytesWritten += int64(n)
 		}
 	}
 
-	checkSums = make([]string, len(disks))
-	for i := range checkSums {
-		checkSums[i] = hex.EncodeToString(hashWriters[i].Sum(nil))
+	f = ErasureFileInfo{
+		Disks:     newDisks,
+		Size:      bytesWritten,
+		Keys:      make([]string, len(disks)),
+		Checksums: make([]string, len(disks)),
 	}
-	return newDisks, bytesWritten, checkSums, nil
+	for i := range f.Checksums {
+		f.Keys[i] = hex.EncodeToString(binKeys[i])
+		f.Checksums[i] = hex.EncodeToString(hashWriters[i].Sum(nil))
+	}
+	return f, nil
 }
 
 // encodeData - encodes incoming data buffer into

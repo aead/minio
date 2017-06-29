@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aead/poly"
 	"github.com/minio/minio/pkg/bitrot"
 	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
@@ -44,17 +45,15 @@ func init() {
 		b2, _ := blake2b.New512(nil)
 		return b2
 	}
-	/*
-		newPoly1305 := func(key []byte) bitrot.Hash {
-			var pKey [32]byte
-			copy(pKey[:], key) // this is safe because bitrot.New will check the len of key
-			return poly.NewPoly1305(pKey)
-		}
-	*/
+	newPoly1305 := func(key []byte, mode bitrot.Mode) bitrot.Hash {
+		var pKey [32]byte
+		copy(pKey[:], key) // this is safe because bitrot.New will check the len of key
+		return poly.NewPoly1305(pKey)
+	}
 
 	bitrot.RegisterAlgorithm(bitrot.SHA256, newSHA256)
 	bitrot.RegisterAlgorithm(bitrot.BLAKE2b512, newBLAKE2b)
-	//bitrot.RegisterAlgorithm(bitrot.Poly1305, newPoly1305)
+	bitrot.RegisterAlgorithm(bitrot.Poly1305, newPoly1305)
 }
 
 // objectPartInfo Info of each part kept in the multipart metadata
@@ -101,7 +100,7 @@ func getDefaultBitRotAlgo() bitrot.Algorithm {
 		return bitrot.SHA256
 	default:
 		// Default for all other architectures we use blake2b.
-		return bitrot.BLAKE2b512
+		return bitrot.Poly1305
 	}
 }
 

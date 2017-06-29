@@ -655,10 +655,11 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 	allowEmpty := true
 
 	// Erasure code data and write across all disks.
-	onlineDisks, sizeWritten, checkSums, err := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tmpPartPath, teeReader, allowEmpty, xlMeta.Erasure.BlockSize, xl.dataBlocks, xl.parityBlocks, defaultBitRotAlgorithm, xl.writeQuorum)
+	file, err := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tmpPartPath, teeReader, allowEmpty, xlMeta.Erasure.BlockSize, xl.dataBlocks, xl.parityBlocks, defaultBitRotAlgorithm, xl.writeQuorum)
 	if err != nil {
 		return pi, toObjectErr(err, bucket, object)
 	}
+	onlineDisks, sizeWritten, checkSums := file.Disks, file.Size, file.Checksums
 
 	// Should return IncompleteBody{} error when reader has fewer bytes
 	// than specified in request header.
@@ -735,6 +736,7 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 		partsMetadata[index].Erasure.AddCheckSumInfo(checkSumInfo{
 			Name:      partSuffix,
 			Hash:      checkSums[index],
+			Key:       file.Keys[index],
 			Algorithm: defaultBitRotAlgorithm.String(),
 		})
 	}

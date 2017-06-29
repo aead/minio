@@ -30,7 +30,6 @@ import (
 	"testing"
 
 	"github.com/minio/minio/pkg/bitrot"
-
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -1041,14 +1040,14 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		t.Fatalf("Unable to create volume, %s", err)
 	}
 
-	blakeHash := func(s string) string {
+	blakeHash := func(s string) []byte {
 		k := blake2b.Sum512([]byte(s))
-		return hex.EncodeToString(k[:])
+		return k[:]
 	}
 
-	sha256Hash := func(s string) string {
+	sha256Hash := func(s string) []byte {
 		k := sha256.Sum256([]byte(s))
-		return hex.EncodeToString(k[:])
+		return k[:]
 	}
 
 	testCases := []struct {
@@ -1056,7 +1055,7 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		offset       int64
 		bufSize      int
 		algo         bitrot.Algorithm
-		expectedHash string
+		expectedHash []byte
 
 		expectedBuf []byte
 		expectedErr error
@@ -1064,14 +1063,14 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		// Hash verification is skipped with empty expected
 		// hash - 1
 		{
-			"myobject", 0, 5, bitrot.BLAKE2b512, "",
+			"myobject", 0, 5, bitrot.BLAKE2b512, nil,
 			[]byte("Hello"), nil,
 		},
 		// Hash verification failure case - 2
 		{
-			"myobject", 0, 5, bitrot.BLAKE2b512, "a",
+			"myobject", 0, 5, bitrot.BLAKE2b512, []byte("a"),
 			[]byte(""),
-			hashMismatchError{"a", blakeHash("Hello, world!")},
+			hashMismatchError{hex.EncodeToString([]byte("a")), hex.EncodeToString(blakeHash("Hello, world!"))},
 		},
 		// Hash verification success with full content requested - 3
 		{
@@ -1117,7 +1116,7 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		var n int64
 		// Common read buffer.
 		var buf = make([]byte, testCase.bufSize)
-		n, err = posixStorage.ReadFileWithVerify(volume, testCase.fileName, testCase.offset, buf, testCase.algo, testCase.expectedHash)
+		n, err = posixStorage.ReadFileWithVerify(volume, testCase.fileName, testCase.offset, buf, &BitrotInfo{testCase.algo, nil, testCase.expectedHash})
 
 		switch {
 		case err == nil && testCase.expectedErr != nil:

@@ -159,11 +159,12 @@ func newTestXLMetaV1() xlMetaV1 {
 	return xlMeta
 }
 
-func (m *xlMetaV1) AddTestObjectCheckSum(checkSumNum int, name string, hash string, algo bitrot.Algorithm) {
+func (m *xlMetaV1) AddTestObjectCheckSum(checkSumNum int, name string, key, hash string, algo bitrot.Algorithm) {
 	checkSum := checkSumInfo{
 		Name:      name,
 		Algorithm: algo.String(),
 		Hash:      hash,
+		Key:       key,
 	}
 	m.Erasure.Checksum[checkSumNum] = checkSum
 }
@@ -202,7 +203,7 @@ func getSampleXLMeta(totalParts int) xlMetaV1 {
 		partName := "part." + strconv.Itoa(i+1)
 		// hard coding hash and algo value for the checksum, Since we are benchmarking the parsing of xl.json the magnitude doesn't affect the test,
 		// The magnitude doesn't make a difference, only the size does.
-		xlMeta.AddTestObjectCheckSum(i, partName, "a23f5eff248c4372badd9f3b2455a285cd4ca86c3d9a570b091d3fc5cd7ca6d9484bbea3f8c5d8d4f84daae96874419eda578fd736455334afbac2c924b3915a", bitrot.BLAKE2b512)
+		xlMeta.AddTestObjectCheckSum(i, partName, "", "a23f5eff248c4372badd9f3b2455a285cd4ca86c3d9a570b091d3fc5cd7ca6d9484bbea3f8c5d8d4f84daae96874419eda578fd736455334afbac2c924b3915a", bitrot.BLAKE2b512)
 		xlMeta.AddTestObjectPart(i, partName, "d3fdd79cc3efd5fe5c068d7be397934b", 67108864)
 	}
 	return xlMeta

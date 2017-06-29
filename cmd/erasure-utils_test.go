@@ -18,12 +18,9 @@ package cmd
 
 import (
 	"bytes"
-	"crypto/rand"
 	"errors"
 	"io"
 	"testing"
-
-	"github.com/minio/minio/pkg/bitrot"
 )
 
 // Test validates the number hash writers returned.
@@ -162,6 +159,7 @@ func TestCopyBuffer(t *testing.T) {
 	}
 }
 
+/*
 // Ensures that only algorithms without keys can be used and that those
 // algorithms do not fail for nil keys.
 // TODO(aead): change this as soon as other bitrot algorithms are used.
@@ -182,3 +180,4 @@ func TestAvailableBitrotAlgorithms(t *testing.T) {
 		}
 	}
 }
+*/

@@ -19,7 +19,6 @@ package cmd
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"reflect"
 	"testing"
 	"time"
@@ -305,15 +304,15 @@ func TestRetryStorage(t *testing.T) {
 		}
 	}
 
-	sha256Hash := func(s string) string {
+	sha256Hash := func(s string) []byte {
 		k := sha256.Sum256([]byte(s))
-		return hex.EncodeToString(k[:])
+		return k[:]
 	}
 	for _, disk := range storageDisks {
 		var buf2 = make([]byte, 5)
 		var n int64
 		if n, err = disk.ReadFileWithVerify("existent", "path", 7, buf2,
-			bitrot.SHA256, sha256Hash("Hello, World")); err != nil {
+			&BitrotInfo{bitrot.SHA256, nil, sha256Hash("Hello, World")}); err != nil {
 			t.Fatal(err)
 		}
 		if err != nil {

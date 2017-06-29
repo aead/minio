@@ -18,11 +18,10 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/hex"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/minio/minio/pkg/bitrot"
 )
 
 // validates functionality provided to find most common
@@ -380,7 +379,9 @@ func TestDisksWithAllParts(t *testing.T) {
 	for diskIndex, partName := range diskFailures {
 		for index, info := range partsMetadata[diskIndex].Erasure.Checksum {
 			if info.Name == partName {
-				partsMetadata[diskIndex].Erasure.Checksum[index].Algorithm = bitrot.SHA256.String()
+				partsMetadata[diskIndex].Erasure.Checksum[index].Algorithm = defaultBitRotAlgorithm.String()
+				partsMetadata[diskIndex].Erasure.Checksum[index].Hash = "invalid hash"
+				partsMetadata[diskIndex].Erasure.Checksum[index].Key = hex.EncodeToString(make([]byte, defaultBitRotAlgorithm.KeySize()))
 			}
 		}
 	}

@@ -83,6 +83,9 @@ type ReadFileWithVerifyArgs struct {
 	// Algorithm used in bit-rot hash computation.
 	Algo bitrot.Algorithm
 
+	// Stored key (hex-encoded) used to compute hash value.
+	Key string
+
 	// Stored hash value (hex-encoded) used to compare with
 	// computed value.
 	ExpectedHash string

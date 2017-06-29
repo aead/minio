@@ -446,18 +446,19 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 			return 0, 0, traceError(err)
 		}
 		// Heal the part file.
-		checkSums, hErr := erasureHealFile(latestDisks, outDatedDisks,
+		file, hErr := erasureHealFile(latestDisks, outDatedDisks,
 			bucket, pathJoin(object, partName),
 			minioMetaTmpBucket, pathJoin(tmpID, partName),
 			partSize, erasure.BlockSize, erasure.DataBlocks, erasure.ParityBlocks, alg)
 		if hErr != nil {
 			return 0, 0, toObjectErr(hErr, bucket, object)
 		}
-		for index, sum := range checkSums {
+		for index, sum := range file.Checksums {
 			if outDatedDisks[index] != nil {
 				checkSumInfos[index] = append(checkSumInfos[index], checkSumInfo{
 					Name:      partName,
 					Algorithm: sumInfo.Algorithm,
+					Key:       file.Keys[index],
 					Hash:      sum,
 				})
 			}

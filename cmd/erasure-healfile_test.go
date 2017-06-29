@@ -28,6 +28,9 @@ import (
 
 // Test erasureHealFile()
 func TestErasureHealFile(t *testing.T) {
+	orig := rand.Reader
+	rand.Reader = NewDerministicRandom()
+	defer func() { rand.Reader = orig }()
 	// Initialize environment needed for the test.
 	dataBlocks := 7
 	parityBlocks := 7
@@ -48,12 +51,12 @@ func TestErasureHealFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create a test file.
-	_, size, checkSums, err := erasureCreateFile(disks, "testbucket", "testobject1", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm, dataBlocks+1)
+	file, err := erasureCreateFile(disks, "testbucket", "testobject1", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm, dataBlocks+1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if size != int64(len(data)) {
-		t.Errorf("erasureCreateFile returned %d, expected %d", size, len(data))
+	if file.Size != int64(len(data)) {
+		t.Errorf("erasureCreateFile returned %d, expected %d", file.Size, len(data))
 	}
 
 	latest := make([]StorageAPI, len(disks))   // Slice of latest disks
@@ -69,12 +72,12 @@ func TestErasureHealFile(t *testing.T) {
 	latest[0] = nil
 	outDated[0] = disks[0]
 
-	healCheckSums, err := erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm)
+	healFile, err := erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Checksum of the healed file should match.
-	if checkSums[0] != healCheckSums[0] {
+	if file.Checksums[0] != healFile.Checksums[0] {
 		t.Error("Healing failed, data does not match.")
 	}
 
@@ -92,19 +95,19 @@ func TestErasureHealFile(t *testing.T) {
 		outDated[index] = disks[index]
 	}
 
-	healCheckSums, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm)
+	healFile, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Checksums of the healed files should match.
 	for index := 0; index < parityBlocks; index++ {
-		if checkSums[index] != healCheckSums[index] {
+		if file.Checksums[index] != healFile.Checksums[index] {
 			t.Error("Healing failed, data does not match.")
 		}
 	}
 	for index := dataBlocks; index < len(disks); index++ {
-		if healCheckSums[index] != "" {
+		if healFile.Checksums[index] != "" {
 			t.Errorf("expected healCheckSums[%d] to be empty", index)
 		}
 	}

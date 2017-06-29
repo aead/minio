@@ -266,7 +266,7 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 		}
 
 		// Get the checksums of the current part.
-		checkSums := make([]string, len(onlineDisks))
+		keys, checkSums := make([]string, len(onlineDisks)), make([]string, len(onlineDisks))
 		var ckSumAlgo = bitrot.UnknownAlgorithm
 		for index, disk := range onlineDisks {
 			// Disk is not found skip the checksum.
@@ -275,6 +275,7 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 				continue
 			}
 			ckSumInfo := metaArr[index].Erasure.GetCheckSumInfo(partName)
+			keys[index] = ckSumInfo.Key
 			checkSums[index] = ckSumInfo.Hash
 			// Set checksum algo only once, while it is possible to have
 			// different algos per block because of our `xl.json`.
@@ -287,16 +288,15 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 				ckSumAlgo = alg
 			}
 		}
-
 		// Start erasure decoding and writing to the client.
-		n, err := erasureReadFile(mw, onlineDisks, bucket, pathJoin(object, partName), partOffset, readSize, partSize, xlMeta.Erasure.BlockSize, xlMeta.Erasure.DataBlocks, xlMeta.Erasure.ParityBlocks, checkSums, ckSumAlgo, pool)
+		file, err := erasureReadFile(mw, onlineDisks, bucket, pathJoin(object, partName), partOffset, readSize, partSize, xlMeta.Erasure.BlockSize, xlMeta.Erasure.DataBlocks, xlMeta.Erasure.ParityBlocks, keys, checkSums, ckSumAlgo, pool)
 		if err != nil {
 			errorIf(err, "Unable to read %s of the object `%s/%s`.", partName, bucket, object)
 			return toObjectErr(err, bucket, object)
 		}
 
 		// Track total bytes read from disk and written to the client.
-		totalBytesRead += n
+		totalBytesRead += file.Size
 
 		// partOffset will be valid only for the first part, hence reset it to 0 for
 		// the remaining parts.
@@ -578,13 +578,13 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 
 		var partSizeWritten int64
 		var checkSums []string
-		var erasureErr error
 
 		// Erasure code data and write across all disks.
-		onlineDisks, partSizeWritten, checkSums, erasureErr = erasureCreateFile(onlineDisks, minioMetaTmpBucket, tempErasureObj, partReader, allowEmptyPart, partsMetadata[0].Erasure.BlockSize, partsMetadata[0].Erasure.DataBlocks, partsMetadata[0].Erasure.ParityBlocks, defaultBitRotAlgorithm, xl.writeQuorum)
+		file, erasureErr := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tempErasureObj, partReader, allowEmptyPart, partsMetadata[0].Erasure.BlockSize, partsMetadata[0].Erasure.DataBlocks, partsMetadata[0].Erasure.ParityBlocks, defaultBitRotAlgorithm, xl.writeQuorum)
 		if erasureErr != nil {
 			return ObjectInfo{}, toObjectErr(erasureErr, minioMetaTmpBucket, tempErasureObj)
 		}
+		onlineDisks, partSizeWritten, checkSums = file.Disks, file.Size, file.Checksums
 
 		// Should return IncompleteBody{} error when reader has fewer bytes
 		// than specified in request header.
@@ -594,7 +594,6 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 
 		// Update the total written size
 		sizeWritten += partSizeWritten
-
 		// If erasure stored some data in the loop or created an empty file
 		if partSizeWritten > 0 || allowEmptyPart {
 			for index := range partsMetadata {
@@ -604,6 +603,7 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 				partsMetadata[index].Erasure.AddCheckSumInfo(checkSumInfo{
 					Name:      partName,
 					Hash:      checkSums[index],
+					Key:       file.Keys[index],
 					Algorithm: defaultBitRotAlgorithm.String(),
 				})
 			}

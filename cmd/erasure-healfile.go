@@ -16,18 +16,25 @@
 
 package cmd
 
-import "encoding/hex"
-import "github.com/minio/minio/pkg/bitrot"
+import (
+	"crypto/rand"
+	"encoding/hex"
+
+	"github.com/minio/minio/pkg/bitrot"
+)
 
 // Heals the erasure coded file. reedsolomon.Reconstruct() is used to reconstruct the missing parts.
 func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volume, path, healBucket, healPath string,
-	size, blockSize int64, dataBlocks, parityBlocks int, algo bitrot.Algorithm) (checkSums []string, err error) {
+	size, blockSize int64, dataBlocks, parityBlocks int, algo bitrot.Algorithm) (f ErasureFileInfo, err error) {
 
 	var offset int64
 	remainingSize := size
 
 	// Hash for bitrot protection.
-	hashWriters := newHashWriters(len(outDatedDisks), defaultBitRotAlgorithm)
+	binKeys, hashWriters, err := newBitrotProtection(len(outDatedDisks), algo, rand.Reader)
+	if err != nil {
+		return
+	}
 
 	for remainingSize > 0 {
 		curBlockSize := blockSize
@@ -48,16 +55,16 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 				continue
 			}
 			enBlocks[index] = make([]byte, curEncBlockSize)
-			_, err := disk.ReadFile(volume, path, offset, enBlocks[index])
+			_, err = disk.ReadFile(volume, path, offset, enBlocks[index])
 			if err != nil {
 				enBlocks[index] = nil
 			}
 		}
 
 		// Reconstruct missing data.
-		err := decodeData(enBlocks, dataBlocks, parityBlocks)
+		err = decodeData(enBlocks, dataBlocks, parityBlocks)
 		if err != nil {
-			return nil, err
+			return
 		}
 
 		// Write to the healPath file.
@@ -67,7 +74,7 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 			}
 			err := disk.AppendFile(healBucket, healPath, enBlocks[index])
 			if err != nil {
-				return nil, traceError(err)
+				return f, traceError(err)
 			}
 			hashWriters[index].Write(enBlocks[index])
 		}
@@ -75,13 +82,18 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 		offset += curEncBlockSize
 	}
 
-	// Checksums for the bit rot.
-	checkSums = make([]string, len(outDatedDisks))
+	f = ErasureFileInfo{
+		Disks:     outDatedDisks,
+		Size:      size,
+		Keys:      make([]string, len(outDatedDisks)),
+		Checksums: make([]string, len(outDatedDisks)),
+	}
 	for index, disk := range outDatedDisks {
 		if disk == nil {
 			continue
 		}
-		checkSums[index] = hex.EncodeToString(hashWriters[index].Sum(nil))
+		f.Keys[index] = hex.EncodeToString(binKeys[index])
+		f.Checksums[index] = hex.EncodeToString(hashWriters[index].Sum(nil))
 	}
-	return checkSums, nil
+	return f, nil
 }

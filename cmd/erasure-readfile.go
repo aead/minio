@@ -21,6 +21,8 @@ import (
 	"io"
 	"sync"
 
+	"encoding/hex"
+
 	"github.com/klauspost/reedsolomon"
 	"github.com/minio/minio/pkg/bitrot"
 	"github.com/minio/minio/pkg/bpool"
@@ -147,10 +149,11 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 			buf = buf[:curChunkSize]
 
 			if needBitRotVerification {
+				sum, _ := hex.DecodeString(brVerifiers[index].checkSum)
+				key, _ := hex.DecodeString(brVerifiers[index].key)
 				_, err = readDisks[index].ReadFileWithVerify(
 					volume, path, blockOffset, buf,
-					brVerifiers[index].algo,
-					brVerifiers[index].checkSum)
+					&BitrotInfo{brVerifiers[index].algo, key, sum})
 			} else {
 				_, err = readDisks[index].ReadFile(volume, path,
 					blockOffset, buf)
@@ -185,28 +188,27 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 // detection by verifying checksum of individual block's checksum.
 func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	offset, length, totalLength, blockSize int64, dataBlocks, parityBlocks int,
-	checkSums []string, algo bitrot.Algorithm, pool *bpool.BytePool) (int64, error) {
+	keys, checkSums []string, algo bitrot.Algorithm, pool *bpool.BytePool) (f ErasureFileInfo, err error) {
 
 	// Offset and length cannot be negative.
 	if offset < 0 || length < 0 {
-		return 0, traceError(errUnexpected)
+		return f, traceError(errUnexpected)
 	}
 
 	// Can't request more data than what is available.
 	if offset+length > totalLength {
-		return 0, traceError(errUnexpected)
+		return f, traceError(errUnexpected)
 	}
 
 	// chunkSize is the amount of data that needs to be read from
 	// each disk at a time.
 	chunkSize := getChunkSize(blockSize, dataBlocks)
-
 	brVerifiers := make([]bitRotVerifier, len(disks))
 	for i := range brVerifiers {
 		brVerifiers[i].algo = algo
 		brVerifiers[i].checkSum = checkSums[i]
+		brVerifiers[i].key = keys[i]
 	}
-
 	// Total bytes written to writer
 	var bytesWritten int64
 
@@ -218,7 +220,6 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	// curChunkSize and curBlockSize can change for the last block if totalLength%blockSize != 0
 	curChunkSize := chunkSize
 	curBlockSize := blockSize
-
 	// For each block, read chunk from each disk. If we are able to read all the data disks then we don't
 	// need to read parity disks. If one of the data disk is missing we need to read DataBlocks+1 number
 	// of disks. Once read, we Reconstruct() missing data if needed and write it to the given writer.
@@ -254,7 +255,7 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 			// get readable disks slice from which we can read parallelly.
 			readDisks, nextIndex, err = getReadDisks(disks, nextIndex, dataBlocks)
 			if err != nil {
-				return bytesWritten, err
+				return f, err
 			}
 			// Issue a parallel read across the disks specified in readDisks.
 			parallelRead(volume, path, readDisks, disks, enBlocks, blockOffset, curChunkSize, brVerifiers, pool)
@@ -264,7 +265,7 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 			}
 			if nextIndex == len(disks) {
 				// No more disks to read from.
-				return bytesWritten, traceError(errXLReadQuorum)
+				return f, traceError(errXLReadQuorum)
 			}
 			// We do not have enough enough data blocks to reconstruct the data
 			// hence continue the for-loop till we have enough data blocks.
@@ -274,7 +275,7 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 		if !isSuccessDataBlocks(enBlocks, dataBlocks) {
 			// Reconstruct the missing data blocks.
 			if err := decodeData(enBlocks, dataBlocks, parityBlocks); err != nil {
-				return bytesWritten, err
+				return f, err
 			}
 		}
 
@@ -299,7 +300,7 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 		// Write data blocks.
 		n, err := writeDataBlocks(writer, enBlocks, dataBlocks, enBlocksOffset, enBlocksLength)
 		if err != nil {
-			return bytesWritten, err
+			return f, err
 		}
 
 		// Update total bytes written.
@@ -312,7 +313,12 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	}
 
 	// Success.
-	return bytesWritten, nil
+	f = ErasureFileInfo{
+		Size:      bytesWritten,
+		Keys:      keys,
+		Checksums: checkSums,
+	}
+	return f, nil
 }
 
 // decodeData - decode encoded blocks.

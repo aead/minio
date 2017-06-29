@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/hex"
 	"io"
 	"io/ioutil"
@@ -521,7 +522,7 @@ func (s *posix) ReadAll(volume, path string) (buf []byte, err error) {
 // Additionally ReadFile also starts reading from an offset. ReadFile
 // semantics are same as io.ReadFull.
 func (s *posix) ReadFile(volume, path string, offset int64, buf []byte) (n int64, err error) {
-	return s.ReadFileWithVerify(volume, path, offset, buf, bitrot.UnknownAlgorithm, "")
+	return s.ReadFileWithVerify(volume, path, offset, buf, &BitrotInfo{bitrot.UnknownAlgorithm, []byte{}, []byte{}})
 }
 
 // ReadFileWithVerify is the same as ReadFile but with hashsum
@@ -534,9 +535,7 @@ func (s *posix) ReadFile(volume, path string, offset int64, buf []byte) (n int64
 //
 // The function takes care to minimize the number of disk read
 // operations.
-func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte,
-	algo bitrot.Algorithm, expectedHash string) (n int64, err error) {
-
+func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte, info *BitrotInfo) (n int64, err error) {
 	defer func() {
 		if err == syscall.EIO {
 			atomic.AddInt32(&s.ioErrCount, 1)
@@ -599,27 +598,24 @@ func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte
 
 	// If expected hash string is empty hash verification is
 	// skipped.
-	needToHash := expectedHash != ""
 	var hasher bitrot.Hash
-
-	if needToHash {
-		// If the hashing algo is invalid, return an error.
-		if !algo.Available() {
+	if info.MustVerify() {
+		if !info.Algorithm.Available() {
 			return 0, errBitrotHashAlgoInvalid
 		}
+		hasher, err = info.Algorithm.New(info.Key, bitrot.Verify)
+		if err != nil {
+			return 0, err
+		}
 
-		// Compute hash of object from start to the byte at
-		// (offset - 1), and as a result of this read, seek to
-		// `offset`.
-		hasher = newHash(algo)
-		if offset > 0 {
+		if offset != 0 {
 			_, err = io.CopyN(hasher, file, offset)
 			if err != nil {
 				return 0, err
 			}
 		}
-	} else {
-		// Seek to requested offset.
+	}
+	if offset != 0 {
 		_, err = file.Seek(offset, os.SEEK_SET)
 		if err != nil {
 			return 0, err
@@ -632,23 +628,21 @@ func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte
 		return 0, err
 	}
 
-	if needToHash {
-		// Continue computing hash with buf.
+	if info.MustVerify() {
 		_, err = hasher.Write(buf)
 		if err != nil {
 			return 0, err
 		}
 
-		// Continue computing hash until end of file.
 		_, err = io.Copy(hasher, file)
 		if err != nil {
 			return 0, err
 		}
 
 		// Verify the computed hash.
-		computedHash := hex.EncodeToString(hasher.Sum(nil))
-		if computedHash != expectedHash {
-			return 0, hashMismatchError{expectedHash, computedHash}
+		computedHash := hasher.Sum(nil)
+		if subtle.ConstantTimeCompare(computedHash, info.Sum) != 1 {
+			return 0, hashMismatchError{hex.EncodeToString(info.Sum), hex.EncodeToString(computedHash)}
 		}
 	}
 

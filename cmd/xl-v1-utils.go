@@ -174,6 +174,7 @@ func parseXLErasureInfo(xlMetaBuf []byte) erasureInfo {
 		checkSum.Name = checkSumResult.Get("name").String()
 		checkSum.Algorithm = checkSumResult.Get("algorithm").String()
 		checkSum.Hash = checkSumResult.Get("hash").String()
+		checkSum.Key = checkSumResult.Get("key").String()
 		checkSums[i] = checkSum
 	}
 	erasure.Checksum = checkSums
