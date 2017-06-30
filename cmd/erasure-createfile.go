@@ -86,6 +86,7 @@ func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader
 	f = ErasureFileInfo{
 		Disks:     newDisks,
 		Size:      bytesWritten,
+		Algorithm: algo,
 		Keys:      binKeys,
 		Checksums: make([][]byte, len(disks)),
 	}

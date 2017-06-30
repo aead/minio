@@ -40,7 +40,7 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 		key, sum := make([]byte, len(keys[i])), make([]byte, len(checksums[i]))
 		copy(key, keys[i])
 		copy(sum, checksums[i])
-		bitrotInfo[i] = &BitrotInfo{algo, key, sum}
+		bitrotInfo[i] = NewBitrotInfo(algo, key, sum)
 	}
 
 	for remainingSize > 0 {
@@ -92,6 +92,7 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 	f = ErasureFileInfo{
 		Disks:     outDatedDisks,
 		Size:      size,
+		Algorithm: algo,
 		Keys:      make([][]byte, len(outDatedDisks)),
 		Checksums: make([][]byte, len(outDatedDisks)),
 	}

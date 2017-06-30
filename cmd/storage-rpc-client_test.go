@@ -397,7 +397,7 @@ func (s *TestRPCStorageSuite) testRPCStorageFileOps(t *testing.T) {
 		}
 		buf2 := make([]byte, 2)
 		n, err = storageDisk.ReadFileWithVerify("myvol", "file1", 1,
-			buf2, &BitrotInfo{bitrot.BLAKE2b512, nil, blakeHash(string(buf))})
+			buf2, NewBitrotInfo(bitrot.BLAKE2b512, nil, blakeHash(string(buf))))
 		if err != nil {
 			t.Error("Error in ReadFileWithVerify", err)
 		}

@@ -472,7 +472,7 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 		}
 		for i := range outDatedDisks {
 			if outDatedDisks[i] != nil {
-				checkSumInfos[i] = append(checkSumInfos[i], NewChecksumInfo(partName, alg, file.Keys[i], file.Checksums[i]))
+				checkSumInfos[i] = append(checkSumInfos[i], NewChecksumInfo(partName, file.Algorithm, file.Keys[i], file.Checksums[i]))
 			}
 		}
 	}

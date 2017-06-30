@@ -19,6 +19,10 @@ package cmd
 import (
 	"bytes"
 	"testing"
+
+	"encoding/hex"
+
+	"github.com/minio/minio/pkg/bitrot"
 )
 
 // mustEncodeData - encodes data slice and provides encoded 2 dimensional slice.
@@ -181,4 +185,82 @@ func newErasureTestSetup(dataBlocks int, parityBlocks int, blockSize int64) (*er
 		}
 	}
 	return &erasureTestSetup{dataBlocks, parityBlocks, blockSize, diskPaths, disks}, nil
+}
+
+var bitrotInfoVerifyTestCases = []struct {
+	data      string
+	algorithm bitrot.Algorithm
+	key       string
+	sum       string
+}{
+	{
+		data:      "48656c6c6f20576f726c64",
+		algorithm: bitrot.SHA256,
+		key:       "",
+		sum:       "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e",
+	},
+	{
+		data:      "48656c6c6f20576f726c64",
+		algorithm: bitrot.BLAKE2b512,
+		key:       "",
+		sum:       "4386a08a265111c9896f56456e2cb61a64239115c4784cf438e36cc851221972da3fb0115f73cd02486254001f878ab1fd126aac69844ef1c1ca152379d0a9bd",
+	},
+	{
+		data:      "48656c6c6f20576f726c64",
+		algorithm: bitrot.Poly1305,
+		key:       "6ceb7288caa29982fbea918b8f0a588bd496862e9f2306f33b2f4e6d51799c65",
+		sum:       "d64aeb6bb5170b52907423051024cfd6",
+	},
+}
+
+func TestBitrotInfoVerify(t *testing.T) {
+	for i, test := range bitrotInfoVerifyTestCases {
+		// decode hex data
+		testData, err := hex.DecodeString(test.data)
+		if err != nil {
+			t.Errorf("Test %d: failed to decode data: %v", i, err)
+		}
+		testKey, err := hex.DecodeString(test.key)
+		if err != nil {
+			t.Errorf("Test %d: failed to decode key: %v", i, err)
+		}
+		testSum, err := hex.DecodeString(test.sum)
+		if err != nil {
+			t.Errorf("Test %d: failed to decode sum: %v", i, err)
+		}
+
+		// test that Verify && MustVerify works for matching checksums
+		info := NewBitrotInfo(test.algorithm, testKey, testSum)
+		if !info.MustVerify() {
+			t.Errorf("Test %d: new bitrot info must be verified", i)
+		}
+		hash, err := test.algorithm.New(testKey, bitrot.Verify)
+		if err != nil {
+			t.Errorf("Test %d: failed to create bitrot verification: %v", i, err)
+		}
+		hash.Write(testData)
+		if sum := hash.Sum(nil); !info.Verify(sum) {
+			t.Errorf("Test %d: bitrot info response with: checksum mismatch for valid checksum: %v", i, hex.EncodeToString(sum))
+		}
+		if info.MustVerify() {
+			t.Errorf("Test %d: new bitrot info response with: must verify after verification", i)
+		}
+
+		// test that Verify && MustVerify works for mismatching checksums
+		info = NewBitrotInfo(test.algorithm, testKey, testSum)
+		if !info.MustVerify() {
+			t.Errorf("Test %d: new bitrot info must be verified", i)
+		}
+		hash, err = test.algorithm.New(testKey, bitrot.Verify)
+		if err != nil {
+			t.Errorf("Test %d: failed to create bitrot verification: %v", i, err)
+		}
+		hash.Write(append(testData, 0))
+		if sum := hash.Sum(nil); info.Verify(sum) {
+			t.Errorf("Test %d: bitrot info response with: checksum are equal for mismatching checksums: got: %v , want: %v", i, hex.EncodeToString(sum), hex.EncodeToString(info.Sum))
+		}
+		if info.MustVerify() {
+			t.Errorf("Test %d: new bitrot info response with: must verify after verification", i)
+		}
+	}
 }

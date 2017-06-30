@@ -601,7 +601,7 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 				// Add the part to xl.json.
 				partsMetadata[i].AddObjectPart(partIdx, partName, "", file.Size)
 				// Add part checksum info to xl.json.
-				partsMetadata[i].Erasure.AddCheckSumInfo(NewChecksumInfo(partName, defaultBitRotAlgorithm, file.Keys[i], file.Checksums[i]))
+				partsMetadata[i].Erasure.AddCheckSumInfo(NewChecksumInfo(partName, file.Algorithm, file.Keys[i], file.Checksums[i]))
 			}
 		}
 

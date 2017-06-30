@@ -312,7 +312,7 @@ func TestRetryStorage(t *testing.T) {
 		var buf2 = make([]byte, 5)
 		var n int64
 		if n, err = disk.ReadFileWithVerify("existent", "path", 7, buf2,
-			&BitrotInfo{bitrot.SHA256, nil, sha256Hash("Hello, World")}); err != nil {
+			NewBitrotInfo(bitrot.SHA256, nil, sha256Hash("Hello, World"))); err != nil {
 			t.Fatal(err)
 		}
 		if err != nil {

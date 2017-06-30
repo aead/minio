@@ -149,7 +149,6 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 				orderedDisks[index] = nil
 				return
 			}
-			info[index].Sum = nil // mark as verified
 			enBlocks[index] = buf
 		}(index)
 	}
@@ -186,7 +185,7 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 		key, sum := make([]byte, len(keys[i])), make([]byte, len(checkSums[i]))
 		copy(key, keys[i])
 		copy(sum, checkSums[i])
-		bitrotInfo[i] = &BitrotInfo{algo, key, sum}
+		bitrotInfo[i] = NewBitrotInfo(algo, key, sum)
 	}
 	// Total bytes written to writer
 	var bytesWritten int64
@@ -294,6 +293,7 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	// Success.
 	f = ErasureFileInfo{
 		Size:      bytesWritten,
+		Algorithm: algo,
 		Keys:      keys,
 		Checksums: checkSums,
 	}

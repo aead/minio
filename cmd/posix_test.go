@@ -1060,12 +1060,6 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		expectedBuf []byte
 		expectedErr error
 	}{
-		// Hash verification is skipped with empty expected
-		// hash - 1
-		{
-			"myobject", 0, 5, bitrot.BLAKE2b512, nil,
-			[]byte("Hello"), nil,
-		},
 		// Hash verification failure case - 2
 		{
 			"myobject", 0, 5, bitrot.BLAKE2b512, []byte("a"),
@@ -1116,7 +1110,7 @@ func TestPosixReadFileWithVerify(t *testing.T) {
 		var n int64
 		// Common read buffer.
 		var buf = make([]byte, testCase.bufSize)
-		n, err = posixStorage.ReadFileWithVerify(volume, testCase.fileName, testCase.offset, buf, &BitrotInfo{testCase.algo, nil, testCase.expectedHash})
+		n, err = posixStorage.ReadFileWithVerify(volume, testCase.fileName, testCase.offset, buf, NewBitrotInfo(testCase.algo, nil, testCase.expectedHash))
 
 		switch {
 		case err == nil && testCase.expectedErr != nil:

@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/hex"
 	"io"
 	"io/ioutil"
@@ -522,7 +521,7 @@ func (s *posix) ReadAll(volume, path string) (buf []byte, err error) {
 // Additionally ReadFile also starts reading from an offset. ReadFile
 // semantics are same as io.ReadFull.
 func (s *posix) ReadFile(volume, path string, offset int64, buf []byte) (n int64, err error) {
-	return s.ReadFileWithVerify(volume, path, offset, buf, &BitrotInfo{bitrot.UnknownAlgorithm, []byte{}, []byte{}})
+	return s.ReadFileWithVerify(volume, path, offset, buf, &BitrotInfo{Algorithm: bitrot.UnknownAlgorithm, Key: nil, Sum: nil, verified: true})
 }
 
 // ReadFileWithVerify is the same as ReadFile but with hashsum
@@ -639,11 +638,8 @@ func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte
 			if err != nil {
 				return 0, err
 			}
-
-			// Verify the computed hash.
-			computedHash := hasher.Sum(nil)
-			if subtle.ConstantTimeCompare(computedHash, info.Sum) != 1 {
-				return 0, hashMismatchError{hex.EncodeToString(info.Sum), hex.EncodeToString(computedHash)}
+			if sum := hasher.Sum(nil); !info.Verify(sum) {
+				return 0, hashMismatchError{hex.EncodeToString(info.Sum), hex.EncodeToString(sum)}
 			}
 		}
 	}
