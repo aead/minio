@@ -133,14 +133,13 @@ func appendFile(disks []StorageAPI, volume, path string, enBlocks [][]byte, hash
 		// Write encoded data in routine.
 		go func(index int, disk StorageAPI) {
 			defer wg.Done()
+			// Calculate hash for each blocks.
+			hashWriters[index].Write(enBlocks[index])
 			wErr := disk.AppendFile(volume, path, enBlocks[index])
 			if wErr != nil {
 				wErrs[index] = traceError(wErr)
 				return
 			}
-
-			// Calculate hash for each blocks.
-			hashWriters[index].Write(enBlocks[index])
 
 			// Successfully wrote.
 			wErrs[index] = nil

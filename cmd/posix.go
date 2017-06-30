@@ -599,7 +599,7 @@ func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte
 	// If expected hash string is empty hash verification is
 	// skipped.
 	var hasher bitrot.Hash
-	if info.MustVerify() {
+	if info.MustVerify() || info.IsCipher() {
 		if !info.Algorithm.Available() {
 			return 0, errBitrotHashAlgoInvalid
 		}
@@ -608,6 +608,7 @@ func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte
 			return 0, err
 		}
 
+		// TODO(aead): add skipping support for ciphers
 		if offset != 0 {
 			_, err = io.CopyN(hasher, file, offset)
 			if err != nil {
@@ -628,21 +629,22 @@ func (s *posix) ReadFileWithVerify(volume, path string, offset int64, buf []byte
 		return 0, err
 	}
 
-	if info.MustVerify() {
+	if info.MustVerify() || info.IsCipher() {
 		_, err = hasher.Write(buf)
 		if err != nil {
 			return 0, err
 		}
+		if info.MustVerify() {
+			_, err = io.Copy(hasher, file)
+			if err != nil {
+				return 0, err
+			}
 
-		_, err = io.Copy(hasher, file)
-		if err != nil {
-			return 0, err
-		}
-
-		// Verify the computed hash.
-		computedHash := hasher.Sum(nil)
-		if subtle.ConstantTimeCompare(computedHash, info.Sum) != 1 {
-			return 0, hashMismatchError{hex.EncodeToString(info.Sum), hex.EncodeToString(computedHash)}
+			// Verify the computed hash.
+			computedHash := hasher.Sum(nil)
+			if subtle.ConstantTimeCompare(computedHash, info.Sum) != 1 {
+				return 0, hashMismatchError{hex.EncodeToString(info.Sum), hex.EncodeToString(computedHash)}
+			}
 		}
 	}
 

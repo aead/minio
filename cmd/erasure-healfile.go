@@ -24,7 +24,7 @@ import (
 
 // Heals the erasure coded file. reedsolomon.Reconstruct() is used to reconstruct the missing parts.
 func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volume, path, healBucket, healPath string,
-	size, blockSize int64, dataBlocks, parityBlocks int, algo bitrot.Algorithm) (f ErasureFileInfo, err error) {
+	size, blockSize int64, dataBlocks, parityBlocks int, keys, checksums [][]byte, algo bitrot.Algorithm) (f ErasureFileInfo, err error) {
 
 	var offset int64
 	remainingSize := size
@@ -33,6 +33,14 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 	binKeys, hashWriters, err := newBitrotProtection(len(outDatedDisks), algo, rand.Reader)
 	if err != nil {
 		return
+	}
+	// Bitrot info for verification.
+	bitrotInfo := make([]*BitrotInfo, len(latestDisks))
+	for i := range bitrotInfo {
+		key, sum := make([]byte, len(keys[i])), make([]byte, len(checksums[i]))
+		copy(key, keys[i])
+		copy(sum, checksums[i])
+		bitrotInfo[i] = &BitrotInfo{algo, key, sum}
 	}
 
 	for remainingSize > 0 {
@@ -54,7 +62,7 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 				continue
 			}
 			enBlocks[index] = make([]byte, curEncBlockSize)
-			_, err = disk.ReadFile(volume, path, offset, enBlocks[index])
+			_, err = disk.ReadFileWithVerify(volume, path, offset, enBlocks[index], bitrotInfo[index])
 			if err != nil {
 				enBlocks[index] = nil
 			}

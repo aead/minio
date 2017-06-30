@@ -27,8 +27,9 @@ import (
 
 	"encoding/hex"
 
-	"github.com/aead/poly"
+	"github.com/aead/poly1305"
 	"github.com/minio/minio/pkg/bitrot"
+	"github.com/minio/minio/pkg/x/chacha20poly1305"
 	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
 )
@@ -50,12 +51,13 @@ func init() {
 	newPoly1305 := func(key []byte, mode bitrot.Mode) bitrot.Hash {
 		var pKey [32]byte
 		copy(pKey[:], key) // this is safe because bitrot.New will check the len of key
-		return poly.NewPoly1305(pKey)
+		return poly1305.New(pKey)
 	}
 
 	bitrot.RegisterAlgorithm(bitrot.SHA256, newSHA256)
 	bitrot.RegisterAlgorithm(bitrot.BLAKE2b512, newBLAKE2b)
 	bitrot.RegisterAlgorithm(bitrot.Poly1305, newPoly1305)
+	bitrot.RegisterAlgorithm(bitrot.ChaCha20Poly1305, chacha20poly1305.New) // TODO(aead): encryption currently breaks some test (e.g.) Copy - needs invest. and fix
 }
 
 // objectPartInfo Info of each part kept in the multipart metadata

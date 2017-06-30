@@ -17,6 +17,7 @@
 package cmd
 
 import (
+	"encoding/hex"
 	"fmt"
 	"path"
 	"sort"
@@ -436,6 +437,7 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 
 	// Heal each part. erasureHealFile() will write the healed part to
 	// .minio/tmp/uuid/ which needs to be renamed later to the final location.
+	keys, checksums := make([][]byte, len(latestDisks)), make([][]byte, len(latestDisks))
 	for partIndex := 0; partIndex < len(latestMeta.Parts); partIndex++ {
 		partName := latestMeta.Parts[partIndex].Name
 		partSize := latestMeta.Parts[partIndex].Size
@@ -445,11 +447,26 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 		if err != nil {
 			return 0, 0, traceError(err)
 		}
+		for i, disk := range latestDisks {
+			if disk == nil {
+				continue
+			}
+			info := partsMetadata[i].Erasure.GetCheckSumInfo(partName)
+			keys[i], err = hex.DecodeString(info.Key)
+			if err != nil {
+				return 0, 0, Errorf("ChecksumInfo [name: %s, id: #%d]: key is no hex value: %v", partName, i, err)
+			}
+			checksums[i], err = hex.DecodeString(info.Hash)
+			if err != nil {
+				return 0, 0, Errorf("ChecksumInfo [name: %s, id: #%d]: hash is no hex value: %v", partName, i, err)
+			}
+		}
+
 		// Heal the part file.
 		file, hErr := erasureHealFile(latestDisks, outDatedDisks,
 			bucket, pathJoin(object, partName),
 			minioMetaTmpBucket, pathJoin(tmpID, partName),
-			partSize, erasure.BlockSize, erasure.DataBlocks, erasure.ParityBlocks, alg)
+			partSize, erasure.BlockSize, erasure.DataBlocks, erasure.ParityBlocks, keys, checksums, alg)
 		if hErr != nil {
 			return 0, 0, toObjectErr(hErr, bucket, object)
 		}
