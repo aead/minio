@@ -432,7 +432,7 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 
 	// Checksum of the part files. checkSumInfos[index] will contain checksums
 	// of all the part files in the outDatedDisks[index]
-	checkSumInfos := make([][]checkSumInfo, len(outDatedDisks))
+	checkSumInfos := make([][]ChecksumInfo, len(outDatedDisks))
 
 	// Heal each part. erasureHealFile() will write the healed part to
 	// .minio/tmp/uuid/ which needs to be renamed later to the final location.
@@ -453,14 +453,9 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 		if hErr != nil {
 			return 0, 0, toObjectErr(hErr, bucket, object)
 		}
-		for index, sum := range file.Checksums {
-			if outDatedDisks[index] != nil {
-				checkSumInfos[index] = append(checkSumInfos[index], checkSumInfo{
-					Name:      partName,
-					Algorithm: sumInfo.Algorithm,
-					Key:       file.Keys[index],
-					Hash:      sum,
-				})
+		for i := range outDatedDisks {
+			if outDatedDisks[i] != nil {
+				checkSumInfos[i] = append(checkSumInfos[i], NewChecksumInfo(partName, alg, file.Keys[i], file.Checksums[i]))
 			}
 		}
 	}

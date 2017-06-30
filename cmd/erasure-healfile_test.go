@@ -77,7 +77,7 @@ func TestErasureHealFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Checksum of the healed file should match.
-	if file.Checksums[0] != healFile.Checksums[0] {
+	if !bytes.Equal(file.Checksums[0], healFile.Checksums[0]) {
 		t.Error("Healing failed, data does not match.")
 	}
 
@@ -102,12 +102,12 @@ func TestErasureHealFile(t *testing.T) {
 
 	// Checksums of the healed files should match.
 	for index := 0; index < parityBlocks; index++ {
-		if file.Checksums[index] != healFile.Checksums[index] {
+		if !bytes.Equal(file.Checksums[index], healFile.Checksums[index]) {
 			t.Error("Healing failed, data does not match.")
 		}
 	}
 	for index := dataBlocks; index < len(disks); index++ {
-		if healFile.Checksums[index] != "" {
+		if healFile.Checksums[index] != nil {
 			t.Errorf("expected healCheckSums[%d] to be empty", index)
 		}
 	}

@@ -25,6 +25,6 @@ func (b *BitrotInfo) MustVerify() bool {
 type ErasureFileInfo struct {
 	Disks     []StorageAPI
 	Size      int64
-	Keys      []string
-	Checksums []string
+	Keys      [][]byte
+	Checksums [][]byte
 }

@@ -203,18 +203,3 @@ func copyBuffer(writer io.Writer, disk StorageAPI, volume string, path string, b
 	// Success.
 	return nil
 }
-
-// bitRotVerifier - type representing bit-rot verification process for
-// a single under-lying object (currently whole files)
-type bitRotVerifier struct {
-	// has the bit-rot verification been done?
-	isVerified bool
-	// is the data free of bit-rot?
-	hasBitRot bool
-	// hashing algorithm
-	algo bitrot.Algorithm
-	key  string
-
-	// hex-encoded expected raw-hash value
-	checkSum string
-}

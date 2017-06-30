@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"io"
 	"sync"
 
@@ -87,12 +86,11 @@ func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader
 	f = ErasureFileInfo{
 		Disks:     newDisks,
 		Size:      bytesWritten,
-		Keys:      make([]string, len(disks)),
-		Checksums: make([]string, len(disks)),
+		Keys:      binKeys,
+		Checksums: make([][]byte, len(disks)),
 	}
 	for i := range f.Checksums {
-		f.Keys[i] = hex.EncodeToString(binKeys[i])
-		f.Checksums[i] = hex.EncodeToString(hashWriters[i].Sum(nil))
+		f.Checksums[i] = hashWriters[i].Sum(nil)
 	}
 	return f, nil
 }

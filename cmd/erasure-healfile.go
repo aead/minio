@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 
 	"github.com/minio/minio/pkg/bitrot"
 )
@@ -85,15 +84,15 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 	f = ErasureFileInfo{
 		Disks:     outDatedDisks,
 		Size:      size,
-		Keys:      make([]string, len(outDatedDisks)),
-		Checksums: make([]string, len(outDatedDisks)),
+		Keys:      make([][]byte, len(outDatedDisks)),
+		Checksums: make([][]byte, len(outDatedDisks)),
 	}
-	for index, disk := range outDatedDisks {
+	for i, disk := range outDatedDisks {
 		if disk == nil {
 			continue
 		}
-		f.Keys[index] = hex.EncodeToString(binKeys[index])
-		f.Checksums[index] = hex.EncodeToString(hashWriters[index].Sum(nil))
+		f.Keys[i] = binKeys[i]
+		f.Checksums[i] = hashWriters[i].Sum(nil)
 	}
 	return f, nil
 }

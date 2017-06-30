@@ -659,18 +659,18 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 	if err != nil {
 		return pi, toObjectErr(err, bucket, object)
 	}
-	onlineDisks, sizeWritten, checkSums := file.Disks, file.Size, file.Checksums
+	onlineDisks = file.Disks
 
 	// Should return IncompleteBody{} error when reader has fewer bytes
 	// than specified in request header.
-	if sizeWritten < size {
+	if file.Size < size {
 		return pi, traceError(IncompleteBody{})
 	}
 
 	// For size == -1, perhaps client is sending in chunked encoding
 	// set the size as size that was actually written.
 	if size == -1 {
-		size = sizeWritten
+		size = file.Size
 	}
 
 	// Calculate new md5sum.
@@ -728,17 +728,12 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 	// Add the current part.
 	xlMeta.AddObjectPart(partID, partSuffix, newMD5Hex, size)
 
-	for index, disk := range onlineDisks {
+	for i, disk := range onlineDisks {
 		if disk == nil {
 			continue
 		}
-		partsMetadata[index].Parts = xlMeta.Parts
-		partsMetadata[index].Erasure.AddCheckSumInfo(checkSumInfo{
-			Name:      partSuffix,
-			Hash:      checkSums[index],
-			Key:       file.Keys[index],
-			Algorithm: defaultBitRotAlgorithm.String(),
-		})
+		partsMetadata[i].Parts = xlMeta.Parts
+		partsMetadata[i].Erasure.AddCheckSumInfo(NewChecksumInfo(partSuffix, defaultBitRotAlgorithm, file.Keys[i], file.Checksums[i]))
 	}
 
 	// Write all the checksum metadata.

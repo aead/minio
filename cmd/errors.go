@@ -151,3 +151,9 @@ func isErr(err error, errs ...error) bool {
 	}
 	return false
 }
+
+// Errorf behaves exactly like Go's fmt.Errorf and propagates the returned
+// error to the minio server.
+func Errorf(format string, args ...interface{}) error {
+	return traceError(fmt.Errorf(format, args...))
+}

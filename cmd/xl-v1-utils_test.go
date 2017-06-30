@@ -160,7 +160,7 @@ func newTestXLMetaV1() xlMetaV1 {
 }
 
 func (m *xlMetaV1) AddTestObjectCheckSum(checkSumNum int, name string, key, hash string, algo bitrot.Algorithm) {
-	checkSum := checkSumInfo{
+	checkSum := ChecksumInfo{
 		Name:      name,
 		Algorithm: algo.String(),
 		Hash:      hash,
@@ -196,7 +196,7 @@ func getXLMetaBytes(totalParts int) []byte {
 func getSampleXLMeta(totalParts int) xlMetaV1 {
 	xlMeta := newTestXLMetaV1()
 	// Number of checksum info == total parts.
-	xlMeta.Erasure.Checksum = make([]checkSumInfo, totalParts)
+	xlMeta.Erasure.Checksum = make([]ChecksumInfo, totalParts)
 	// total number of parts.
 	xlMeta.Parts = make([]objectPartInfo, totalParts)
 	for i := 0; i < totalParts; i++ {

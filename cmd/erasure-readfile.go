@@ -21,8 +21,6 @@ import (
 	"io"
 	"sync"
 
-	"encoding/hex"
-
 	"github.com/klauspost/reedsolomon"
 	"github.com/minio/minio/pkg/bitrot"
 	"github.com/minio/minio/pkg/bpool"
@@ -114,7 +112,7 @@ func getReadDisks(orderedDisks []StorageAPI, index int, dataBlocks int) (readDis
 
 // parallelRead - reads chunks in parallel from the disks specified in []readDisks.
 func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enBlocks [][]byte,
-	blockOffset, curChunkSize int64, brVerifiers []bitRotVerifier, pool *bpool.BytePool) {
+	blockOffset, curChunkSize int64, info []*BitrotInfo, pool *bpool.BytePool) {
 
 	// WaitGroup to synchronise the read go-routines.
 	wg := &sync.WaitGroup{}
@@ -129,15 +127,9 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 		go func(index int) {
 			defer wg.Done()
 
-			// evaluate if we need to perform bit-rot checking
-			needBitRotVerification := true
-			if brVerifiers[index].isVerified {
-				needBitRotVerification = false
-				// if file has bit-rot, do not reuse disk
-				if brVerifiers[index].hasBitRot {
-					orderedDisks[index] = nil
-					return
-				}
+			// if file has bit-rot, do not reuse disk
+			if orderedDisks[index] == nil {
+				return
 			}
 
 			buf, err := pool.Get()
@@ -148,30 +140,16 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 			}
 			buf = buf[:curChunkSize]
 
-			if needBitRotVerification {
-				sum, _ := hex.DecodeString(brVerifiers[index].checkSum)
-				key, _ := hex.DecodeString(brVerifiers[index].key)
-				_, err = readDisks[index].ReadFileWithVerify(
-					volume, path, blockOffset, buf,
-					&BitrotInfo{brVerifiers[index].algo, key, sum})
+			if info[index].MustVerify() || info[index].IsCipher() {
+				_, err = readDisks[index].ReadFileWithVerify(volume, path, blockOffset, buf, info[index])
 			} else {
-				_, err = readDisks[index].ReadFile(volume, path,
-					blockOffset, buf)
+				_, err = readDisks[index].ReadFile(volume, path, blockOffset, buf)
 			}
-
-			// if bit-rot verification was done, store the
-			// result of verification so we can skip
-			// re-doing it next time
-			if needBitRotVerification {
-				brVerifiers[index].isVerified = true
-				_, ok := err.(hashMismatchError)
-				brVerifiers[index].hasBitRot = ok
-			}
-
 			if err != nil {
 				orderedDisks[index] = nil
 				return
 			}
+			info[index].Sum = nil // mark as verified
 			enBlocks[index] = buf
 		}(index)
 	}
@@ -188,7 +166,7 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 // detection by verifying checksum of individual block's checksum.
 func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	offset, length, totalLength, blockSize int64, dataBlocks, parityBlocks int,
-	keys, checkSums []string, algo bitrot.Algorithm, pool *bpool.BytePool) (f ErasureFileInfo, err error) {
+	keys, checkSums [][]byte, algo bitrot.Algorithm, pool *bpool.BytePool) (f ErasureFileInfo, err error) {
 
 	// Offset and length cannot be negative.
 	if offset < 0 || length < 0 {
@@ -203,11 +181,12 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	// chunkSize is the amount of data that needs to be read from
 	// each disk at a time.
 	chunkSize := getChunkSize(blockSize, dataBlocks)
-	brVerifiers := make([]bitRotVerifier, len(disks))
-	for i := range brVerifiers {
-		brVerifiers[i].algo = algo
-		brVerifiers[i].checkSum = checkSums[i]
-		brVerifiers[i].key = keys[i]
+	bitrotInfo := make([]*BitrotInfo, len(disks))
+	for i := range bitrotInfo {
+		key, sum := make([]byte, len(keys[i])), make([]byte, len(checkSums[i]))
+		copy(key, keys[i])
+		copy(sum, checkSums[i])
+		bitrotInfo[i] = &BitrotInfo{algo, key, sum}
 	}
 	// Total bytes written to writer
 	var bytesWritten int64
@@ -258,7 +237,7 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 				return f, err
 			}
 			// Issue a parallel read across the disks specified in readDisks.
-			parallelRead(volume, path, readDisks, disks, enBlocks, blockOffset, curChunkSize, brVerifiers, pool)
+			parallelRead(volume, path, readDisks, disks, enBlocks, blockOffset, curChunkSize, bitrotInfo, pool)
 			if isSuccessDecodeBlocks(enBlocks, dataBlocks) {
 				// If enough blocks are available to do rs.Reconstruct()
 				break

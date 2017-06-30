@@ -17,12 +17,15 @@
 package cmd
 
 import (
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"path"
 	"sync"
 	"time"
 
+	"github.com/minio/minio/pkg/bitrot"
 	"github.com/tidwall/gjson"
 )
 
@@ -149,7 +152,7 @@ func parseXLRelease(xlMetaBuf []byte) string {
 	return gjson.GetBytes(xlMetaBuf, "minio.release").String()
 }
 
-func parseXLErasureInfo(xlMetaBuf []byte) erasureInfo {
+func parseXLErasureInfo(xlMetaBuf []byte) (erasureInfo, error) {
 	erasure := erasureInfo{}
 	erasureResult := gjson.GetBytes(xlMetaBuf, "erasure")
 	// parse the xlV1Meta.Erasure.Distribution.
@@ -168,18 +171,28 @@ func parseXLErasureInfo(xlMetaBuf []byte) erasureInfo {
 	erasure.Index = int(erasureResult.Get("index").Int())
 	// Pare xlMetaV1.Erasure.Checksum array.
 	checkSumsResult := erasureResult.Get("checksum").Array()
-	checkSums := make([]checkSumInfo, len(checkSumsResult))
+	checkSums := make([]ChecksumInfo, len(checkSumsResult))
 	for i, checkSumResult := range checkSumsResult {
-		checkSum := checkSumInfo{}
-		checkSum.Name = checkSumResult.Get("name").String()
-		checkSum.Algorithm = checkSumResult.Get("algorithm").String()
-		checkSum.Hash = checkSumResult.Get("hash").String()
-		checkSum.Key = checkSumResult.Get("key").String()
-		checkSums[i] = checkSum
+		hash, err := hex.DecodeString(checkSumResult.Get("hash").String())
+		if err != nil {
+			return erasure, fmt.Errorf("checksum #%d: hash is no hex value: %v", i, err)
+		}
+		key := []byte{}
+		if hexKey := checkSumResult.Get("key"); hexKey.Exists() {
+			key, err = hex.DecodeString(hexKey.String())
+			if err != nil {
+				return erasure, fmt.Errorf("checksum #%d: hash is no hex value: %v", i, err)
+			}
+		}
+		algorithm, err := bitrot.AlgorithmFromString(checkSumResult.Get("algorithm").String())
+		if err != nil {
+			return erasure, fmt.Errorf("checksum #%d: algorithm is not available: %v", i, err)
+		}
+		checkSums[i] = NewChecksumInfo(checkSumResult.Get("name").String(), algorithm, key, hash)
 	}
 	erasure.Checksum = checkSums
 
-	return erasure
+	return erasure, nil
 }
 
 func parseXLParts(xlMetaBuf []byte) []objectPartInfo {
@@ -222,7 +235,10 @@ func xlMetaV1UnmarshalJSON(xlMetaBuf []byte) (xmv xlMetaV1, e error) {
 
 	xlMeta.Stat = stat
 	// parse the xlV1Meta.Erasure fields.
-	xlMeta.Erasure = parseXLErasureInfo(xlMetaBuf)
+	xlMeta.Erasure, err = parseXLErasureInfo(xlMetaBuf)
+	if err != nil {
+		return
+	}
 
 	// Parse the XL Parts.
 	xlMeta.Parts = parseXLParts(xlMetaBuf)

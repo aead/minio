@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"encoding/hex"
+
 	"github.com/aead/poly"
 	"github.com/minio/minio/pkg/bitrot"
 	sha256 "github.com/minio/sha256-simd"
@@ -72,12 +74,22 @@ func (t byObjectPartNumber) Len() int           { return len(t) }
 func (t byObjectPartNumber) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 func (t byObjectPartNumber) Less(i, j int) bool { return t[i].Number < t[j].Number }
 
-// checkSumInfo - carries checksums of individual scattered parts per disk.
-type checkSumInfo struct {
+// ChecksumInfo - carries checksums of individual scattered parts per disk.
+type ChecksumInfo struct {
 	Name      string `json:"name"`
 	Algorithm string `json:"algorithm"`
 	Hash      string `json:"hash"`
 	Key       string `json:"key"`
+}
+
+// NewChecksumInfo returns a new checkSumInfo with the given name, algorithm, key, and hash.
+func NewChecksumInfo(name string, algorithm bitrot.Algorithm, key, hash []byte) ChecksumInfo {
+	return ChecksumInfo{
+		Name:      name,
+		Algorithm: algorithm.String(),
+		Key:       hex.EncodeToString(key),
+		Hash:      hex.EncodeToString(hash),
+	}
 }
 
 // Constant indicates current bit-rot algo used when creating objects.
@@ -113,11 +125,11 @@ type erasureInfo struct {
 	BlockSize    int64          `json:"blockSize"`
 	Index        int            `json:"index"`
 	Distribution []int          `json:"distribution"`
-	Checksum     []checkSumInfo `json:"checksum,omitempty"`
+	Checksum     []ChecksumInfo `json:"checksum,omitempty"`
 }
 
 // AddCheckSum - add checksum of a part.
-func (e *erasureInfo) AddCheckSumInfo(ckSumInfo checkSumInfo) {
+func (e *erasureInfo) AddCheckSumInfo(ckSumInfo ChecksumInfo) {
 	for i, sum := range e.Checksum {
 		if sum.Name == ckSumInfo.Name {
 			e.Checksum[i] = ckSumInfo
@@ -128,14 +140,14 @@ func (e *erasureInfo) AddCheckSumInfo(ckSumInfo checkSumInfo) {
 }
 
 // GetCheckSumInfo - get checksum of a part.
-func (e erasureInfo) GetCheckSumInfo(partName string) (ckSum checkSumInfo) {
+func (e erasureInfo) GetCheckSumInfo(partName string) (ckSum ChecksumInfo) {
 	// Return the checksum.
 	for _, sum := range e.Checksum {
 		if sum.Name == partName {
 			return sum
 		}
 	}
-	return checkSumInfo{Algorithm: defaultBitRotAlgorithm.String()}
+	return ChecksumInfo{Algorithm: defaultBitRotAlgorithm.String()}
 }
 
 // statInfo - carries stat information of the object.

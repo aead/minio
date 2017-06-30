@@ -87,7 +87,7 @@ func TestCommonTime(t *testing.T) {
 
 // partsMetaFromModTimes - returns slice of modTimes given metadata of
 // an object part.
-func partsMetaFromModTimes(modTimes []time.Time, checksums []checkSumInfo) []xlMetaV1 {
+func partsMetaFromModTimes(modTimes []time.Time, checksums []ChecksumInfo) []xlMetaV1 {
 	var partsMetadata []xlMetaV1
 	for _, modTime := range modTimes {
 		partsMetadata = append(partsMetadata, xlMetaV1{
