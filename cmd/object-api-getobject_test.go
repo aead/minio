@@ -153,7 +153,7 @@ func testGetObject(obj ObjectLayer, instanceType string, t TestErrHandler) {
 	}
 
 	for i, testCase := range testCases {
-		err = obj.GetObject(testCase.bucketName, testCase.objectName, testCase.startOffset, testCase.length, testCase.writer)
+		err = obj.GetObject(testCase.bucketName, testCase.objectName, testCase.startOffset, testCase.length, testCase.writer, nil)
 		if err != nil && testCase.shouldPass {
 			t.Errorf("Test %d: %s:  Expected to pass, but failed with: <ERROR> %s", i+1, instanceType, err.Error())
 		}
@@ -264,7 +264,7 @@ func testGetObjectPermissionDenied(obj ObjectLayer, instanceType string, disks [
 			}
 		}
 
-		err = obj.GetObject(testCase.bucketName, testCase.objectName, testCase.startOffset, testCase.length, testCase.writer)
+		err = obj.GetObject(testCase.bucketName, testCase.objectName, testCase.startOffset, testCase.length, testCase.writer, nil)
 		if err != nil && testCase.shouldPass {
 			t.Errorf("Test %d: %s:  Expected to pass, but failed with: <ERROR> %s", i+1, instanceType, err.Error())
 		}
@@ -426,7 +426,7 @@ func testGetObjectDiskNotFound(obj ObjectLayer, instanceType string, disks []str
 	}
 
 	for i, testCase := range testCases {
-		err = obj.GetObject(testCase.bucketName, testCase.objectName, testCase.startOffset, testCase.length, testCase.writer)
+		err = obj.GetObject(testCase.bucketName, testCase.objectName, testCase.startOffset, testCase.length, testCase.writer, nil)
 		if err != nil && testCase.shouldPass {
 			t.Errorf("Test %d: %s:  Expected to pass, but failed with: <ERROR> %s", i+1, instanceType, err.Error())
 		}

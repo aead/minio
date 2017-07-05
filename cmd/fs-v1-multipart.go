@@ -421,7 +421,7 @@ func (fs fsObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, u
 	pipeReader, pipeWriter := io.Pipe()
 
 	go func() {
-		if gerr := fs.GetObject(srcBucket, srcObject, startOffset, length, pipeWriter); gerr != nil {
+		if gerr := fs.GetObject(srcBucket, srcObject, startOffset, length, pipeWriter, nil); gerr != nil {
 			errorIf(gerr, "Unable to read %s/%s.", srcBucket, srcObject)
 			pipeWriter.CloseWithError(gerr)
 			return

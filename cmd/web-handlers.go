@@ -546,7 +546,7 @@ func (web *webAPIHandlers) Download(w http.ResponseWriter, r *http.Request) {
 	objectLock.RLock()
 	defer objectLock.RUnlock()
 
-	if err := objectAPI.GetObject(bucket, object, 0, -1, w); err != nil {
+	if err := objectAPI.GetObject(bucket, object, 0, -1, w, nil); err != nil {
 		/// No need to print error, response writer already written to.
 		return
 	}
@@ -610,7 +610,7 @@ func (web *webAPIHandlers) DownloadZip(w http.ResponseWriter, r *http.Request) {
 				writeWebErrorResponse(w, errUnexpected)
 				return err
 			}
-			return objectAPI.GetObject(args.BucketName, objectName, 0, info.Size, writer)
+			return objectAPI.GetObject(args.BucketName, objectName, 0, info.Size, writer, nil)
 		}
 
 		if !hasSuffix(object, slashSeparator) {

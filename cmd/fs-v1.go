@@ -346,7 +346,7 @@ func (fs fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string
 
 	go func() {
 		var startOffset int64 // Read the whole file.
-		if gerr := fs.GetObject(srcBucket, srcObject, startOffset, length, pipeWriter); gerr != nil {
+		if gerr := fs.GetObject(srcBucket, srcObject, startOffset, length, pipeWriter, nil); gerr != nil {
 			errorIf(gerr, "Unable to read %s/%s.", srcBucket, srcObject)
 			pipeWriter.CloseWithError(gerr)
 			return
@@ -371,7 +371,7 @@ func (fs fsObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string
 //
 // startOffset indicates the starting read location of the object.
 // length indicates the total length of the object.
-func (fs fsObjects) GetObject(bucket, object string, offset int64, length int64, writer io.Writer) (err error) {
+func (fs fsObjects) GetObject(bucket, object string, offset int64, length int64, writer io.Writer, encInfo *ServerSideEncryptionInfo) (err error) {
 	if err = checkGetObjArgs(bucket, object); err != nil {
 		return err
 	}

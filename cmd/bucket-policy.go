@@ -150,7 +150,7 @@ func readBucketPolicyJSON(bucket string, objAPI ObjectLayer) (bucketPolicyReader
 	defer objLock.RUnlock()
 
 	var buffer bytes.Buffer
-	err = objAPI.GetObject(minioMetaBucket, policyPath, 0, -1, &buffer)
+	err = objAPI.GetObject(minioMetaBucket, policyPath, 0, -1, &buffer, nil)
 	if err != nil {
 		if isErrObjectNotFound(err) || isErrIncompleteBody(err) {
 			return nil, BucketPolicyNotFound{Bucket: bucket}

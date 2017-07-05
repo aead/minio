@@ -133,14 +133,12 @@ func (api gatewayAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Re
 		}
 		return w.Write(p)
 	})
-
-	getObject := objectAPI.GetObject
 	if reqAuthType == authTypeAnonymous {
-		getObject = objectAPI.AnonGetObject
+		err = objectAPI.AnonGetObject(bucket, object, startOffset, length, writer)
+	} else {
+		err = objectAPI.GetObject(bucket, object, startOffset, length, writer, nil)
 	}
-
-	// Reads the object at startOffset and writes to mw.
-	if err = getObject(bucket, object, startOffset, length, writer); err != nil {
+	if err != nil {
 		errorIf(err, "Unable to write to client.")
 		if !dataWritten {
 			// Error response only if no data has been written to client yet. i.e if

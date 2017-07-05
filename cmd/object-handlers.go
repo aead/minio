@@ -155,9 +155,10 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 		}
 		return w.Write(p)
 	})
+	var encInfo *ServerSideEncryptionInfo
 
 	// Reads the object at startOffset and writes to mw.
-	if err = objectAPI.GetObject(bucket, object, startOffset, length, writer); err != nil {
+	if err = objectAPI.GetObject(bucket, object, startOffset, length, writer, encInfo); err != nil {
 		errorIf(err, "Unable to write to client.")
 		if !dataWritten {
 			// Error response only if no data has been written to client yet. i.e if
@@ -455,7 +456,6 @@ func (api objectAPIHandlers) PutObjectHandler(w http.ResponseWriter, r *http.Req
 		writeErrorResponse(w, ErrEntityTooLarge, r.URL)
 		return
 	}
-
 	// Extract metadata to be saved from incoming HTTP header.
 	metadata := extractMetadataFromHeader(r.Header)
 	if rAuthType == authTypeStreamingSigned {

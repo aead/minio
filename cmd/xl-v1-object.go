@@ -110,7 +110,7 @@ func (xl xlObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string
 
 	go func() {
 		var startOffset int64 // Read the whole file.
-		if gerr := xl.GetObject(srcBucket, srcObject, startOffset, length, pipeWriter); gerr != nil {
+		if gerr := xl.GetObject(srcBucket, srcObject, startOffset, length, pipeWriter, nil); gerr != nil {
 			errorIf(gerr, "Unable to read %s of the object `%s/%s`.", srcBucket, srcObject)
 			pipeWriter.CloseWithError(toObjectErr(gerr, srcBucket, srcObject))
 			return
@@ -135,7 +135,7 @@ func (xl xlObjects) CopyObject(srcBucket, srcObject, dstBucket, dstObject string
 //
 // startOffset indicates the starting read location of the object.
 // length indicates the total length of the object.
-func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer) error {
+func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer, encInfo *ServerSideEncryptionInfo) error {
 	if err := checkGetObjArgs(bucket, object); err != nil {
 		return err
 	}
@@ -164,7 +164,6 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 	if err != nil {
 		return err
 	}
-
 	// Reorder online disks based on erasure distribution order.
 	onlineDisks = shuffleDisks(onlineDisks, xlMeta.Erasure.Distribution)
 
@@ -293,7 +292,7 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 			}
 		}
 		// Start erasure decoding and writing to the client.
-		secretKey := []byte{}
+		secretKey := []byte{} // TODO(aead): replace by user provided key
 		file, err := erasureReadFile(mw, onlineDisks, bucket, pathJoin(object, partName), partOffset, readSize, partSize, xlMeta.Erasure.BlockSize, xlMeta.Erasure.DataBlocks, xlMeta.Erasure.ParityBlocks, secretKey, keys, checksums, algorithm, pool)
 		if err != nil {
 			errorIf(err, "Unable to read %s of the object `%s/%s`.", partName, bucket, object)
@@ -531,7 +530,6 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 
 	// Initialize parts metadata
 	partsMetadata := make([]xlMetaV1, len(xl.storageDisks))
-
 	xlMeta := newXLMetaV1(object, xl.dataBlocks, xl.parityBlocks)
 
 	// Initialize xl meta.

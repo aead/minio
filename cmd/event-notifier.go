@@ -374,7 +374,7 @@ func loadNotificationConfig(bucket string, objAPI ObjectLayer) (*notificationCon
 	defer objLock.RUnlock()
 
 	var buffer bytes.Buffer
-	err := objAPI.GetObject(minioMetaBucket, ncPath, 0, -1, &buffer) // Read everything.
+	err := objAPI.GetObject(minioMetaBucket, ncPath, 0, -1, &buffer, nil) // Read everything.
 	if err != nil {
 		// 'notification.xml' not found return
 		// 'errNoSuchNotifications'.  This is default when no
@@ -417,7 +417,7 @@ func loadListenerConfig(bucket string, objAPI ObjectLayer) ([]listenerConfig, er
 	defer objLock.RUnlock()
 
 	var buffer bytes.Buffer
-	err := objAPI.GetObject(minioMetaBucket, lcPath, 0, -1, &buffer)
+	err := objAPI.GetObject(minioMetaBucket, lcPath, 0, -1, &buffer, nil)
 	if err != nil {
 		// 'notification.xml' not found return
 		// 'errNoSuchNotifications'.  This is default when no

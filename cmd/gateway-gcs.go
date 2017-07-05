@@ -579,7 +579,7 @@ func (l *gcsGateway) ListObjectsV2(bucket, prefix, continuationToken string, fet
 //
 // startOffset indicates the starting read location of the object.
 // length indicates the total length of the object.
-func (l *gcsGateway) GetObject(bucket string, key string, startOffset int64, length int64, writer io.Writer) error {
+func (l *gcsGateway) GetObject(bucket string, key string, startOffset int64, length int64, writer io.Writer, encInfo *ServerSideEncryptionInfo) error {
 	// if we want to mimic S3 behavior exactly, we need to verify if bucket exists first,
 	// otherwise gcs will just return object not exist in case of non-existing bucket
 	if _, err := l.client.Bucket(bucket).Attrs(l.ctx); err != nil {

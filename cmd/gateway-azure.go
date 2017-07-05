@@ -320,7 +320,7 @@ func (a *azureObjects) ListObjectsV2(bucket, prefix, continuationToken string, f
 //
 // startOffset indicates the starting read location of the object.
 // length indicates the total length of the object.
-func (a *azureObjects) GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer) error {
+func (a *azureObjects) GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer, encInfo *ServerSideEncryptionInfo) error {
 	byteRange := fmt.Sprintf("%d-", startOffset)
 	if length > 0 && startOffset > 0 {
 		byteRange = fmt.Sprintf("%d-%d", startOffset, startOffset+length-1)

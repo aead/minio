@@ -209,7 +209,7 @@ func testMultipleObjectCreation(obj ObjectLayer, instanceType string, c TestErrH
 
 	for key, value := range objects {
 		var byteBuffer bytes.Buffer
-		err = obj.GetObject("bucket", key, 0, int64(len(value)), &byteBuffer)
+		err = obj.GetObject("bucket", key, 0, int64(len(value)), &byteBuffer, nil)
 		if err != nil {
 			c.Fatalf("%s: <ERROR> %s", instanceType, err)
 		}
@@ -456,7 +456,7 @@ func testObjectOverwriteWorks(obj ObjectLayer, instanceType string, c TestErrHan
 	}
 
 	var bytesBuffer bytes.Buffer
-	err = obj.GetObject("bucket", "object", 0, length, &bytesBuffer)
+	err = obj.GetObject("bucket", "object", 0, length, &bytesBuffer, nil)
 	if err != nil {
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}
@@ -523,7 +523,7 @@ func testPutObject(obj ObjectLayer, instanceType string, c TestErrHandler) {
 	if err != nil {
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}
-	err = obj.GetObject("bucket", "object", 0, length, &bytesBuffer1)
+	err = obj.GetObject("bucket", "object", 0, length, &bytesBuffer1, nil)
 	if err != nil {
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}
@@ -536,7 +536,7 @@ func testPutObject(obj ObjectLayer, instanceType string, c TestErrHandler) {
 	if err != nil {
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}
-	err = obj.GetObject("bucket", "object", 0, length, &bytesBuffer2)
+	err = obj.GetObject("bucket", "object", 0, length, &bytesBuffer2, nil)
 	if err != nil {
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}
@@ -566,7 +566,7 @@ func testPutObjectInSubdir(obj ObjectLayer, instanceType string, c TestErrHandle
 	}
 
 	var bytesBuffer bytes.Buffer
-	err = obj.GetObject("bucket", "dir1/dir2/object", 0, length, &bytesBuffer)
+	err = obj.GetObject("bucket", "dir1/dir2/object", 0, length, &bytesBuffer, nil)
 	if err != nil {
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}

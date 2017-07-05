@@ -276,7 +276,7 @@ func fromMinioClientListBucketResult(bucket string, result minio.ListBucketResul
 //
 // startOffset indicates the starting read location of the object.
 // length indicates the total length of the object.
-func (l *s3Objects) GetObject(bucket string, key string, startOffset int64, length int64, writer io.Writer) error {
+func (l *s3Objects) GetObject(bucket string, key string, startOffset int64, length int64, writer io.Writer, encInfo *ServerSideEncryptionInfo) error {
 	r := minio.NewGetReqHeaders()
 
 	if length < 0 && length != -1 {
