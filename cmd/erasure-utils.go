@@ -26,22 +26,33 @@ import (
 	"github.com/minio/minio/pkg/bitrot"
 )
 
-// newHashWriters - inititialize a slice of hashes for the disk count.
-func newHashWriters(diskCount int, algo bitrot.Algorithm) []bitrot.Hash {
-	hashWriters := make([]bitrot.Hash, diskCount)
-	for index := range hashWriters {
-		hashWriters[index] = newHash(algo)
+func newBitrotProtection(num int, secretKey []byte, algorithm bitrot.Algorithm, random io.Reader) (keys [][]byte, hasher []bitrot.Hash, err error) {
+	if len(secretKey) != 0 && !algorithm.IsCipher() {
+		return nil, nil, errBitrotHashAlgoInvalid
 	}
-	return hashWriters
-}
+	if len(secretKey) == 0 && algorithm.IsCipher() {
+		return nil, nil, errBitrotHashAlgoInvalid
+	}
+	if algorithm.IsCipher() && len(secretKey) > algorithm.KeySize() {
+		return nil, nil, Errorf("bad secret key length: #%d", len(secretKey))
+	}
 
-func newBitrotProtection(num int, algorithm bitrot.Algorithm, random io.Reader) (keys [][]byte, hasher []bitrot.Hash, err error) {
 	keys, hasher = make([][]byte, num), make([]bitrot.Hash, num)
 	for i := range keys {
-		keys[i], err = algorithm.GenerateKey(random)
+		if algorithm.IsCipher() {
+			keys[i] = make([]byte, algorithm.KeySize())
+			key := keys[i][len(keys[i])-len(secretKey):]
+			nonce := keys[i][:len(keys[i])-len(secretKey)]
+			copy(key, secretKey)
+			_, err = io.ReadFull(random, nonce)
+		} else {
+			keys[i], err = algorithm.GenerateKey(random)
+		}
 		if err != nil {
 			return
 		}
+	}
+	for i := range hasher {
 		hasher[i], err = algorithm.New(keys[i], bitrot.Protect)
 		if err != nil {
 			return
@@ -50,9 +61,27 @@ func newBitrotProtection(num int, algorithm bitrot.Algorithm, random io.Reader) 
 	return
 }
 
-// newHash - gives you a newly allocated hash depending on the input algorithm.
-func newHash(algo bitrot.Algorithm) (h bitrot.Hash) {
-	h, _ = algo.New(nil, bitrot.Protect) // the mode is only necessary for ciphers, so it doesn't matter which mode we pass
+func newBitrotVerification(secretKey []byte, algorithm bitrot.Algorithm, keys, checksums [][]byte) (info []*BitrotInfo, err error) {
+	if len(secretKey) != 0 && !algorithm.IsCipher() {
+		return nil, errBitrotHashAlgoInvalid
+	}
+	if len(secretKey) == 0 && algorithm.IsCipher() {
+		return nil, errBitrotHashAlgoInvalid
+	}
+	if algorithm.IsCipher() && len(secretKey) > algorithm.KeySize() {
+		return nil, Errorf("bad secret key length: #%d", len(secretKey))
+	}
+
+	info = make([]*BitrotInfo, len(keys))
+	for i := range info {
+		key, sum := make([]byte, len(keys[i])+len(secretKey)), make([]byte, len(checksums[i]))
+		copy(sum, checksums[i])
+		copy(key, keys[i])
+		if algorithm.IsCipher() {
+			copy(key[len(keys[i]):], secretKey)
+		}
+		info[i] = NewBitrotInfo(algorithm, key, sum)
+	}
 	return
 }
 

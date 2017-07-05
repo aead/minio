@@ -15,6 +15,15 @@
  */
 
 // Package bitrot provides algorithms for detecting data corruption.
+// Currently there are three types of bitrot protection mechanisms:
+// Cryptographic hash functions, (polynomial-based) authenticators and authenticated
+// encryption schemes.
+//
+// For all three different types of bitrot detection techniques there are different
+// requirements for the key.
+// A cryptographic hash function does not require a key.
+// A (polynomial-based) authenticator requires an unique (randomly generated) key.
+// A authenticated encryption scheme requires an unique/random nonce and a secret key.
 package bitrot
 
 import (
@@ -51,9 +60,11 @@ const (
 	SHA256
 
 	// AESGCM specifies the AES-GCM AEAD cipher construction (AES-256)
+	// AESGCM expects, that the provided key consists of a nonce and a secret key.
 	AESGCM
 
 	// ChaCha20Poly1305 specifies the ChaCha20Poly1305 AEAD cipher construction
+	// ChaCha20Poly1305 expects, that the provided key consists of a nonce and a secret key.
 	ChaCha20Poly1305
 
 	// add algorithms here
@@ -67,8 +78,8 @@ var keysizes = []int{
 	GHASH:            32,
 	BLAKE2b512:       0,
 	SHA256:           0,
-	AESGCM:           32,
-	ChaCha20Poly1305: 32,
+	AESGCM:           12 + 32, // 96 bit nonce and 256 bit secret key
+	ChaCha20Poly1305: 12 + 32, // 96 bit nonce and 256 bit secret key
 }
 
 var names = []string{
@@ -108,6 +119,12 @@ func (a Algorithm) KeySize() int {
 // Available reports whether the given algorithm is registered.
 func (a Algorithm) Available() bool {
 	return a < UnknownAlgorithm && hashes[a] != nil
+}
+
+// IsCipher returns true if the algorithm is a cipher which can be used
+// for bitrot protection and encryption.
+func (a Algorithm) IsCipher() bool {
+	return a == AESGCM || a == ChaCha20Poly1305
 }
 
 // String returns a string representation of the algorithm.
@@ -155,7 +172,14 @@ func AlgorithmFromString(s string) (Algorithm, error) {
 // Hash is the common interface for bitrot protection.
 // A bitrot protection algorithm implementation must implement this interface.
 type Hash interface {
+	// Write adds more data to the running bitrot hash.
+	// This function should return a non-nil error if a call
+	// to Write happens after a call to Sum. So it is not possible
+	// to compute the checksum and than add more data.
 	io.Writer
 
+	// Sum appends the hash value of the previously
+	// processed data to b and returns the resulting slice.
+	// It is safe to call this function multiple times.
 	Sum(b []byte) []byte
 }

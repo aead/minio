@@ -24,23 +24,20 @@ import (
 
 // Heals the erasure coded file. reedsolomon.Reconstruct() is used to reconstruct the missing parts.
 func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volume, path, healBucket, healPath string,
-	size, blockSize int64, dataBlocks, parityBlocks int, keys, checksums [][]byte, algo bitrot.Algorithm) (f ErasureFileInfo, err error) {
+	size, blockSize int64, dataBlocks, parityBlocks int, secretKey []byte, keys, checksums [][]byte, algo bitrot.Algorithm) (f ErasureFileInfo, err error) {
 
 	var offset int64
 	remainingSize := size
 
 	// Hash for bitrot protection.
-	binKeys, hashWriters, err := newBitrotProtection(len(outDatedDisks), algo, rand.Reader)
+	binKeys, hashWriters, err := newBitrotProtection(len(outDatedDisks), secretKey, algo, rand.Reader)
 	if err != nil {
 		return
 	}
 	// Bitrot info for verification.
-	bitrotInfo := make([]*BitrotInfo, len(latestDisks))
-	for i := range bitrotInfo {
-		key, sum := make([]byte, len(keys[i])), make([]byte, len(checksums[i]))
-		copy(key, keys[i])
-		copy(sum, checksums[i])
-		bitrotInfo[i] = NewBitrotInfo(algo, key, sum)
+	bitrotInfo, err := newBitrotVerification(secretKey, algo, keys, checksums)
+	if err != nil {
+		return
 	}
 
 	for remainingSize > 0 {
@@ -101,6 +98,10 @@ func erasureHealFile(latestDisks []StorageAPI, outDatedDisks []StorageAPI, volum
 			continue
 		}
 		f.Keys[i] = binKeys[i]
+		if algo.IsCipher() {
+			nonce := binKeys[i][:len(binKeys[i])-len(secretKey)]
+			f.Keys[i] = nonce
+		}
 		f.Checksums[i] = hashWriters[i].Sum(nil)
 	}
 	return f, nil

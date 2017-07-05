@@ -132,6 +132,7 @@ func (xl xlObjects) listObjectsHeal(bucket, prefix, marker, delimiter string, ma
 		xl.listPool.Set(params, walkResultCh, endWalkCh)
 	}
 
+	secretKey := []byte{} // TODO(aead): replace by user provided key
 	result := ListObjectsInfo{IsTruncated: !eof}
 	for _, objInfo := range objInfos {
 		result.NextMarker = objInfo.Name
@@ -144,7 +145,7 @@ func (xl xlObjects) listObjectsHeal(bucket, prefix, marker, delimiter string, ma
 		objectLock := globalNSMutex.NewNSLock(bucket, objInfo.Name)
 		objectLock.RLock()
 		partsMetadata, errs := readAllXLMetadata(xl.storageDisks, bucket, objInfo.Name)
-		if xlShouldHeal(xl.storageDisks, partsMetadata, errs, bucket, objInfo.Name) {
+		if xlShouldHeal(xl.storageDisks, partsMetadata, errs, secretKey, bucket, objInfo.Name) {
 			healStat := xlHealStat(xl, partsMetadata, errs)
 			result.Objects = append(result.Objects, ObjectInfo{
 				Name:           objInfo.Name,
@@ -360,7 +361,7 @@ func (xl xlObjects) listMultipartUploadsHeal(bucket, prefix, keyMarker,
 		}
 
 	}
-
+	secretKey := []byte{} // TODO(aead): replace by user provided key
 	// For all received uploads fill in the multiparts result.
 	for _, upload := range uploads {
 		var objectName string
@@ -377,7 +378,7 @@ func (xl xlObjects) listMultipartUploadsHeal(bucket, prefix, keyMarker,
 			uploadIDPath := filepath.Join(bucket, upload.Object, upload.UploadID)
 			partsMetadata, errs := readAllXLMetadata(xl.storageDisks,
 				minioMetaMultipartBucket, uploadIDPath)
-			if xlShouldHeal(xl.storageDisks, partsMetadata, errs,
+			if xlShouldHeal(xl.storageDisks, partsMetadata, errs, secretKey,
 				minioMetaMultipartBucket, uploadIDPath) {
 
 				healUploadInfo := xlHealStat(xl, partsMetadata, errs)

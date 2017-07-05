@@ -143,7 +143,7 @@ func outDatedDisks(disks, latestDisks []StorageAPI, errs []error, partsMetadata 
 }
 
 // Returns if the object should be healed.
-func xlShouldHeal(disks []StorageAPI, partsMetadata []xlMetaV1, errs []error, bucket, object string) bool {
+func xlShouldHeal(disks []StorageAPI, partsMetadata []xlMetaV1, errs []error, secretKey []byte, bucket, object string) bool {
 	onlineDisks, _ := listOnlineDisks(disks, partsMetadata,
 		errs)
 	// Return true even if one of the disks have stale data.
@@ -156,7 +156,7 @@ func xlShouldHeal(disks []StorageAPI, partsMetadata []xlMetaV1, errs []error, bu
 	// Check if all parts of an object are available and their
 	// checksums are valid.
 	availableDisks, _, err := disksWithAllParts(onlineDisks, partsMetadata,
-		errs, bucket, object)
+		errs, secretKey, bucket, object)
 	if err != nil {
 		// Note: This error is due to failure of blake2b
 		// checksum computation of a part. It doesn't clearly
@@ -252,7 +252,7 @@ func xlHealStat(xl xlObjects, partsMetadata []xlMetaV1, errs []error) HealObject
 // missing parts.
 // - non-nil error if any of the online disks failed during
 // calculating blake2b checksum.
-func disksWithAllParts(onlineDisks []StorageAPI, partsMetadata []xlMetaV1, errs []error, bucket, object string) ([]StorageAPI, []error, error) {
+func disksWithAllParts(onlineDisks []StorageAPI, partsMetadata []xlMetaV1, errs []error, secretKey []byte, bucket, object string) ([]StorageAPI, []error, error) {
 	availableDisks := make([]StorageAPI, len(onlineDisks))
 	for diskIndex, onlineDisk := range onlineDisks {
 		if onlineDisk == nil {
@@ -269,9 +269,21 @@ func disksWithAllParts(onlineDisks []StorageAPI, partsMetadata []xlMetaV1, errs 
 			if err != nil {
 				return nil, nil, err
 			}
+			if len(secretKey) != 0 && !alg.IsCipher() {
+				return nil, nil, errBitrotHashAlgoInvalid
+			}
+			if len(secretKey) == 0 && alg.IsCipher() {
+				return nil, nil, errBitrotHashAlgoInvalid
+			}
+			if alg.IsCipher() && len(secretKey) > alg.KeySize() {
+				return nil, nil, Errorf("bad secret key length: #%d", len(secretKey))
+			}
 			key, err := hex.DecodeString(checkSumInfo.Key)
 			if err != nil {
 				return nil, nil, err
+			}
+			if alg.IsCipher() {
+				key = append(key, secretKey...)
 			}
 			hash, err := alg.New(key, bitrot.Verify)
 			if err != nil {

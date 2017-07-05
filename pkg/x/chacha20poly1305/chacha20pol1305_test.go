@@ -22,29 +22,34 @@ var newTestCases = []struct {
 	sum       []byte
 }{
 	{
-		key:       mustDecode("0000000000000000000000000000000000000000000000000000000000000000"),
+		key:       mustDecode("000000000000000000000000" + "0000000000000000000000000000000000000000000000000000000000000000"),
 		plaintext: nil,
-		sum:       mustDecode("13d8de523538ee1187dc7a44d346c303"),
+		sum:       mustDecode("4eb972c9a8fb3a1b382bb4d36f5ffad1"),
 	},
 	{
-		key:       mustDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
+		key:       mustDecode("000000000000000000000000" + "0000000000000000000000000000000000000000000000000000000000000000"),
 		plaintext: mustDecode("00"),
-		sum:       mustDecode("cc0244fc1d59bbcb801e6ac2e09191ef"),
+		sum:       mustDecode("bedcfd1809ff3c10adf8277fcc0581b8"),
 	},
 	{
-		key:       mustDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
-		plaintext: mustDecode("000000000000000000000000000000000000000000000000000000000000000000"),
-		sum:       mustDecode("517f9c9b841a411c5957b6118c1fff13"),
+		key:       mustDecode("000000000000000000000000" + "0000000000000000000000000000000000000000000000000000000000000001"),
+		plaintext: mustDecode("00"),
+		sum:       mustDecode("2dbf7ae9248db8b96563943e27bc5569"),
 	},
 	{
-		key:       mustDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
-		plaintext: mustDecode("100000000000000000000000000000000000000000000000000000000000000000"),
-		sum:       mustDecode("c3ca8d71f610698f8cfed3bcb56e2f0f"),
+		key:       mustDecode("000000000000000000000001" + "0000000000000000000000000000000000000000000000000000000000000000"),
+		plaintext: mustDecode("00"),
+		sum:       mustDecode("fcdb7ac5fcb63c63cf2e15bd4899be5d"),
 	},
 	{
-		key:       mustDecode("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"),
-		plaintext: mustDecode("00000000000000000000000000000000000000000000000000000000000001"),
-		sum:       mustDecode("a034618b1af0c1e63ffbe924161344ef"),
+		key:       mustDecode("00000000000000000000ffff" + "1000000000000000000000000000000000000000000000000000000000000002"),
+		plaintext: mustDecode("000000000000000000000000000000000000000000000000000000000000000001"),
+		sum:       mustDecode("277f7c563e714adfbfc73dc72f60165a"),
+	},
+	{
+		key:       mustDecode("000000000000000000000000" + "0000000000000000000000000000000000000000000000000000000000000000"),
+		plaintext: mustDecode("0000000000000000000000000000000000000000000000000000000000000000"),
+		sum:       mustDecode("95f82bfae8f522217f8b7db39b40ad06"),
 	},
 }
 
@@ -74,8 +79,8 @@ func TestNew(t *testing.T) {
 	// Test that New fails for a bad key
 	defer func() {
 		if err := recover(); err == nil {
-			t.Fatal("New should panic if the key is not 32 bytes long, but it passes")
+			t.Fatal("New should panic if the key is not 44 bytes long, but it passes")
 		}
 	}()
-	_ = New(make([]byte, 31), bitrot.Protect)
+	_ = New(make([]byte, 32), bitrot.Protect)
 }

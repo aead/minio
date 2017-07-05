@@ -325,7 +325,8 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 		return 0, 0, toObjectErr(reducedErr, bucket, object)
 	}
 
-	if !xlShouldHeal(storageDisks, partsMetadata, errs, bucket, object) {
+	secretKey := []byte{} // TODO(aead): replace by user provided key
+	if !xlShouldHeal(storageDisks, partsMetadata, errs, secretKey, bucket, object) {
 		// There is nothing to heal.
 		return 0, 0, nil
 	}
@@ -334,7 +335,7 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 	latestDisks, modTime := listOnlineDisks(storageDisks, partsMetadata, errs)
 
 	// List of disks having all parts as per latest xl.json.
-	availableDisks, errs, aErr := disksWithAllParts(latestDisks, partsMetadata, errs, bucket, object)
+	availableDisks, errs, aErr := disksWithAllParts(latestDisks, partsMetadata, errs, secretKey, bucket, object)
 	if aErr != nil {
 		return 0, 0, toObjectErr(aErr, bucket, object)
 	}
@@ -466,7 +467,7 @@ func healObject(storageDisks []StorageAPI, bucket string, object string, quorum 
 		file, hErr := erasureHealFile(latestDisks, outDatedDisks,
 			bucket, pathJoin(object, partName),
 			minioMetaTmpBucket, pathJoin(tmpID, partName),
-			partSize, erasure.BlockSize, erasure.DataBlocks, erasure.ParityBlocks, keys, checksums, alg)
+			partSize, erasure.BlockSize, erasure.DataBlocks, erasure.ParityBlocks, secretKey, keys, checksums, alg)
 		if hErr != nil {
 			return 0, 0, toObjectErr(hErr, bucket, object)
 		}

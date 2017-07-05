@@ -43,6 +43,9 @@ func TestErasureHealFile(t *testing.T) {
 	defer setup.Remove()
 
 	disks := setup.disks
+	secretKey := []byte{} // TODO(aead): replace by user provided key
+
+	algorithm := DefaultBitrotAlgorithm // TODO(aead): replace by user provided algorithm (SSE y/n)
 
 	// Prepare a slice of 1MiB with random data.
 	data := make([]byte, 1*humanize.MiByte)
@@ -51,7 +54,7 @@ func TestErasureHealFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Create a test file.
-	file, err := erasureCreateFile(disks, "testbucket", "testobject1", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm, dataBlocks+1)
+	file, err := erasureCreateFile(disks, "testbucket", "testobject1", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, secretKey, algorithm, dataBlocks+1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +75,7 @@ func TestErasureHealFile(t *testing.T) {
 	latest[0] = nil
 	outDated[0] = disks[0]
 
-	healFile, err := erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, file.Keys, file.Checksums, defaultBitRotAlgorithm)
+	healFile, err := erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, secretKey, file.Keys, file.Checksums, algorithm)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +98,7 @@ func TestErasureHealFile(t *testing.T) {
 		outDated[index] = disks[index]
 	}
 
-	healFile, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, file.Keys, file.Checksums, defaultBitRotAlgorithm)
+	healFile, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, secretKey, file.Keys, file.Checksums, algorithm)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +128,7 @@ func TestErasureHealFile(t *testing.T) {
 		latest[index] = nil
 		outDated[index] = disks[index]
 	}
-	_, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, file.Keys, file.Checksums, defaultBitRotAlgorithm)
+	_, err = erasureHealFile(latest, outDated, "testbucket", "testobject1", "testbucket", "testobject1", 1*humanize.MiByte, blockSize, dataBlocks, parityBlocks, secretKey, file.Keys, file.Checksums, algorithm)
 	if err == nil {
 		t.Error("Expected erasureHealFile() to fail when the number of available disks <= parityBlocks")
 	}

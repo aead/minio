@@ -23,16 +23,6 @@ import (
 	"testing"
 )
 
-// Test validates the number hash writers returned.
-func TestNewHashWriters(t *testing.T) {
-	diskNum := 8
-	hashWriters := newHashWriters(diskNum, defaultBitRotAlgorithm)
-	if len(hashWriters) != diskNum {
-		t.Errorf("Expected %d hashWriters, but instead got %d", diskNum, len(hashWriters))
-	}
-
-}
-
 // Tests validate the output of getChunkSize.
 func TestGetChunkSize(t *testing.T) {
 	// Refer to comments on getChunkSize() for details.

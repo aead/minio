@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
-	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -37,6 +36,15 @@ import (
 const (
 	// Erasure related constants.
 	erasureAlgorithmKlauspost = "klauspost/reedsolomon/vandermonde"
+)
+
+const (
+	// DefaultBitrotAlgorithm is the default algorithm used for bitrot protection
+	DefaultBitrotAlgorithm = bitrot.Poly1305 // must be registered
+
+	// DefaultSSEncryptionAlgorithm is the default algorithm used for server-side-encryption
+	// and bitrot protection of SSE-encrypted objects.
+	DefaultSSEncryptionAlgorithm = bitrot.ChaCha20Poly1305 // must be registered
 )
 
 // register bitrot algorithms
@@ -57,7 +65,7 @@ func init() {
 	bitrot.RegisterAlgorithm(bitrot.SHA256, newSHA256)
 	bitrot.RegisterAlgorithm(bitrot.BLAKE2b512, newBLAKE2b)
 	bitrot.RegisterAlgorithm(bitrot.Poly1305, newPoly1305)
-	bitrot.RegisterAlgorithm(bitrot.ChaCha20Poly1305, chacha20poly1305.New) // TODO(aead): encryption currently breaks some test (e.g.) Copy - needs invest. and fix
+	bitrot.RegisterAlgorithm(bitrot.ChaCha20Poly1305, chacha20poly1305.New)
 }
 
 // objectPartInfo Info of each part kept in the multipart metadata
@@ -81,7 +89,14 @@ type ChecksumInfo struct {
 	Name      string `json:"name"`
 	Algorithm string `json:"algorithm"`
 	Hash      string `json:"hash"`
-	Key       string `json:"key"`
+	// Key is a special bitrot protection field. There are three different "types" of keys:
+	//  - For general purpose hash functions (like BLAKE2b) this field is empty (we need no key)
+	//  - For poly. authenticators (like poly1305) this field contains a key.
+	//  - For AEAD ciphers (like ChaCha20Poly1305) this field does NOT contain the secret encryption
+	//    key - SSE would be pointless if we store the key together with the encrypted data.
+	//    If the part is encrypted, Key contains the nonce (see AEAD) for the encryption. The secret key
+	//    must be provided by the user.
+	Key string `json:"key"`
 }
 
 // NewChecksumInfo returns a new checkSumInfo with the given name, algorithm, key, and hash.
@@ -91,30 +106,6 @@ func NewChecksumInfo(name string, algorithm bitrot.Algorithm, key, hash []byte) 
 		Algorithm: algorithm.String(),
 		Key:       hex.EncodeToString(key),
 		Hash:      hex.EncodeToString(hash),
-	}
-}
-
-// Constant indicates current bit-rot algo used when creating objects.
-// Depending on the architecture we are choosing a different checksum.
-var defaultBitRotAlgorithm = getDefaultBitRotAlgo()
-
-// Get the default bit-rot algo depending on the architecture.
-// Currently this function defaults to "blake2b" as the preferred
-// checksum algorithm on all architectures except ARM64. On ARM64
-// we use sha256 (optimized using sha2 instructions of ARM NEON chip).
-func getDefaultBitRotAlgo() bitrot.Algorithm {
-	switch runtime.GOARCH {
-	case "arm64":
-		// As a special case for ARM64 we use an optimized
-		// version of hash i.e sha256. This is done so that
-		// blake2b is sub-optimal and slower on ARM64.
-		// This would also allows erasure coded writes
-		// on ARM64 servers to be on-par with their
-		// counter-part X86_64 servers.
-		return bitrot.SHA256
-	default:
-		// Default for all other architectures we use blake2b.
-		return bitrot.Poly1305
 	}
 }
 
@@ -149,7 +140,7 @@ func (e erasureInfo) GetCheckSumInfo(partName string) (ckSum ChecksumInfo) {
 			return sum
 		}
 	}
-	return ChecksumInfo{Algorithm: defaultBitRotAlgorithm.String()}
+	return ChecksumInfo{Algorithm: DefaultBitrotAlgorithm.String()}
 }
 
 // statInfo - carries stat information of the object.

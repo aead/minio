@@ -48,6 +48,9 @@ func TestErasureCreateFile(t *testing.T) {
 	defer setup.Remove()
 
 	disks := setup.disks
+	secretKey := []byte{} // TODO(aead): replace by user provided key
+
+	algorithm := DefaultBitrotAlgorithm // TODO(aead): replace by user provided algorithm (SSE y/n)
 
 	// Prepare a slice of 1MiB with random data.
 	data := make([]byte, 1*humanize.MiByte)
@@ -56,7 +59,7 @@ func TestErasureCreateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Test when all disks are up.
-	file, err := erasureCreateFile(disks, "testbucket", "testobject1", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm, dataBlocks+1)
+	file, err := erasureCreateFile(disks, "testbucket", "testobject1", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, secretKey, algorithm, dataBlocks+1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +72,7 @@ func TestErasureCreateFile(t *testing.T) {
 	disks[5] = AppendDiskDown{disks[5].(*posix)}
 
 	// Test when two disks are down.
-	file, err = erasureCreateFile(disks, "testbucket", "testobject2", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm, dataBlocks+1)
+	file, err = erasureCreateFile(disks, "testbucket", "testobject2", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, secretKey, algorithm, dataBlocks+1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +86,7 @@ func TestErasureCreateFile(t *testing.T) {
 	disks[8] = AppendDiskDown{disks[8].(*posix)}
 	disks[9] = AppendDiskDown{disks[9].(*posix)}
 
-	file, err = erasureCreateFile(disks, "testbucket", "testobject3", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm, dataBlocks+1)
+	file, err = erasureCreateFile(disks, "testbucket", "testobject3", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, secretKey, algorithm, dataBlocks+1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +96,7 @@ func TestErasureCreateFile(t *testing.T) {
 
 	// 1 more disk down. 7 disk down in total. Should return quorum error.
 	disks[10] = AppendDiskDown{disks[10].(*posix)}
-	_, err = erasureCreateFile(disks, "testbucket", "testobject4", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, defaultBitRotAlgorithm, dataBlocks+1)
+	_, err = erasureCreateFile(disks, "testbucket", "testobject4", bytes.NewReader(data), true, blockSize, dataBlocks, parityBlocks, secretKey, algorithm, dataBlocks+1)
 	if errorCause(err) != errXLWriteQuorum {
 		t.Errorf("erasureCreateFile return value: expected errXLWriteQuorum, got %s", err)
 	}

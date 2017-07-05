@@ -29,12 +29,12 @@ import (
 // all the disks, writes also calculate individual block's checksum
 // for future bit-rot protection.
 func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader, allowEmpty bool, blockSize int64,
-	dataBlocks, parityBlocks int, algo bitrot.Algorithm, writeQuorum int) (f ErasureFileInfo, err error) {
+	dataBlocks, parityBlocks int, secretKey []byte, algo bitrot.Algorithm, writeQuorum int) (f ErasureFileInfo, err error) {
 
 	// Allocated blockSized buffer for reading from incoming stream.
 	buf := make([]byte, blockSize)
 
-	binKeys, hashWriters, err := newBitrotProtection(len(disks), algo, rand.Reader)
+	binKeys, hashWriters, err := newBitrotProtection(len(disks), secretKey, algo, rand.Reader)
 	if err != nil {
 		return
 	}
@@ -82,7 +82,6 @@ func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader
 			bytesWritten += int64(n)
 		}
 	}
-
 	f = ErasureFileInfo{
 		Disks:     newDisks,
 		Size:      bytesWritten,
@@ -91,6 +90,10 @@ func erasureCreateFile(disks []StorageAPI, volume, path string, reader io.Reader
 		Checksums: make([][]byte, len(disks)),
 	}
 	for i := range f.Checksums {
+		if algo.IsCipher() {
+			nonce := binKeys[i][:len(binKeys[i])-len(secretKey)]
+			f.Keys[i] = nonce
+		}
 		f.Checksums[i] = hashWriters[i].Sum(nil)
 	}
 	return f, nil

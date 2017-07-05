@@ -164,7 +164,7 @@ func parallelRead(volume, path string, readDisks, orderedDisks []StorageAPI, enB
 // written to given writer. This function also supports bit-rot
 // detection by verifying checksum of individual block's checksum.
 func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
-	offset, length, totalLength, blockSize int64, dataBlocks, parityBlocks int,
+	offset, length, totalLength, blockSize int64, dataBlocks, parityBlocks int, secretKey []byte,
 	keys, checkSums [][]byte, algo bitrot.Algorithm, pool *bpool.BytePool) (f ErasureFileInfo, err error) {
 
 	// Offset and length cannot be negative.
@@ -180,12 +180,9 @@ func erasureReadFile(writer io.Writer, disks []StorageAPI, volume, path string,
 	// chunkSize is the amount of data that needs to be read from
 	// each disk at a time.
 	chunkSize := getChunkSize(blockSize, dataBlocks)
-	bitrotInfo := make([]*BitrotInfo, len(disks))
-	for i := range bitrotInfo {
-		key, sum := make([]byte, len(keys[i])), make([]byte, len(checkSums[i]))
-		copy(key, keys[i])
-		copy(sum, checkSums[i])
-		bitrotInfo[i] = NewBitrotInfo(algo, key, sum)
+	bitrotInfo, err := newBitrotVerification(secretKey, algo, keys, checkSums)
+	if err != nil {
+		return
 	}
 	// Total bytes written to writer
 	var bytesWritten int64

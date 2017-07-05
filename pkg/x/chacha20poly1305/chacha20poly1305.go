@@ -28,16 +28,19 @@ import (
 )
 
 // New returns a new Hash. It encrypts and authenticates all data
-// which is passed to it. The given key must be 32 byte long and
-// unique - the nonce is generated from the key, so the passed key
-// MUST be randomly generated.
-func New(key []byte, mode bitrot.Mode) bitrot.Hash {
-	var nonce [8]byte
-	chacha.XORKeyStream(nonce[:], nonce[:], nonce[:], key, 20) // TODO(aead): is this necessary - maybe discuss with frank?!
-	cipher, err := chacha.NewCipher(nonce[:], key, 20)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create ChaCha20 cipher: %v", err))
+// which is passed to it. The given keyNonce must be 44 byte long and
+// unique. New assumes that the nonce is within the first 12 bytes of keyNonce
+// and the secret key within the last 32 bytes.
+func New(keyNonce []byte, mode bitrot.Mode) bitrot.Hash {
+	if len(keyNonce) != 12+32 {
+		panic(fmt.Sprintf("bad key length: #%d", len(keyNonce)))
 	}
+
+	key, nonce := make([]byte, 32), make([]byte, 12)
+	copy(nonce, keyNonce[:12])
+	copy(key, keyNonce[12:])
+
+	cipher, _ := chacha.NewCipher(nonce, key, 20)
 
 	var polyKey [32]byte
 	cipher.XORKeyStream(polyKey[:], polyKey[:])

@@ -269,11 +269,12 @@ func TestListOnlineDisks(t *testing.T) {
 			}
 
 		}
+		secretKey := []byte{} // TODO(aead): replace by user provided key
 
 		partsMetadata := partsMetaFromModTimes(test.modTimes, xlMeta.Erasure.Checksum)
 
 		onlineDisks, modTime := listOnlineDisks(xlDisks, partsMetadata, test.errs)
-		availableDisks, newErrs, _ := disksWithAllParts(onlineDisks, partsMetadata, test.errs, bucket, object)
+		availableDisks, newErrs, _ := disksWithAllParts(onlineDisks, partsMetadata, test.errs, secretKey, bucket, object)
 		test.errs = newErrs
 		outdatedDisks := outDatedDisks(xlDisks, availableDisks, test.errs, partsMetadata, bucket, object)
 		if modTime.Equal(timeSentinel) {
@@ -376,19 +377,20 @@ func TestDisksWithAllParts(t *testing.T) {
 	diskFailures[3] = "part.1"
 	diskFailures[15] = "part.2"
 
+	secretKey := []byte{} // TODO(aead): replace by user provided key
 	for diskIndex, partName := range diskFailures {
 		for index, info := range partsMetadata[diskIndex].Erasure.Checksum {
 			if info.Name == partName {
-				partsMetadata[diskIndex].Erasure.Checksum[index].Algorithm = defaultBitRotAlgorithm.String()
+				partsMetadata[diskIndex].Erasure.Checksum[index].Algorithm = DefaultBitrotAlgorithm.String()
 				partsMetadata[diskIndex].Erasure.Checksum[index].Hash = "invalid hash"
-				partsMetadata[diskIndex].Erasure.Checksum[index].Key = hex.EncodeToString(make([]byte, defaultBitRotAlgorithm.KeySize()))
+				partsMetadata[diskIndex].Erasure.Checksum[index].Key = hex.EncodeToString(make([]byte, DefaultBitrotAlgorithm.KeySize()-len(secretKey)))
 			}
 		}
 	}
 
 	errs = make([]error, len(xlDisks))
 	filteredDisks, errs, err :=
-		disksWithAllParts(xlDisks, partsMetadata, errs, bucket, object)
+		disksWithAllParts(xlDisks, partsMetadata, errs, secretKey, bucket, object)
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}
@@ -425,7 +427,7 @@ func TestDisksWithAllParts(t *testing.T) {
 	}
 
 	filteredDisks, errs, err =
-		disksWithAllParts(xlDisks, partsMetadata, errs, bucket, object)
+		disksWithAllParts(xlDisks, partsMetadata, errs, secretKey, bucket, object)
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err)
 	}

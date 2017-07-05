@@ -293,7 +293,8 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 			}
 		}
 		// Start erasure decoding and writing to the client.
-		file, err := erasureReadFile(mw, onlineDisks, bucket, pathJoin(object, partName), partOffset, readSize, partSize, xlMeta.Erasure.BlockSize, xlMeta.Erasure.DataBlocks, xlMeta.Erasure.ParityBlocks, keys, checksums, algorithm, pool)
+		secretKey := []byte{}
+		file, err := erasureReadFile(mw, onlineDisks, bucket, pathJoin(object, partName), partOffset, readSize, partSize, xlMeta.Erasure.BlockSize, xlMeta.Erasure.DataBlocks, xlMeta.Erasure.ParityBlocks, secretKey, keys, checksums, algorithm, pool)
 		if err != nil {
 			errorIf(err, "Unable to read %s of the object `%s/%s`.", partName, bucket, object)
 			return toObjectErr(err, bucket, object)
@@ -581,7 +582,9 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 		allowEmptyPart := partIdx == 1
 
 		// Erasure code data and write across all disks.
-		file, erasureErr := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tempErasureObj, partReader, allowEmptyPart, partsMetadata[0].Erasure.BlockSize, partsMetadata[0].Erasure.DataBlocks, partsMetadata[0].Erasure.ParityBlocks, defaultBitRotAlgorithm, xl.writeQuorum)
+		secretKey := []byte{}
+		algorithm := DefaultBitrotAlgorithm
+		file, erasureErr := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tempErasureObj, partReader, allowEmptyPart, partsMetadata[0].Erasure.BlockSize, partsMetadata[0].Erasure.DataBlocks, partsMetadata[0].Erasure.ParityBlocks, secretKey, algorithm, xl.writeQuorum)
 		if erasureErr != nil {
 			return ObjectInfo{}, toObjectErr(erasureErr, minioMetaTmpBucket, tempErasureObj)
 		}
