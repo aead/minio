@@ -120,6 +120,8 @@ func extractMetadataFromHeader(header http.Header) map[string]string {
 			metadata[key] = header.Get(key)
 		} else if strings.HasPrefix(key, "X-Minio-Meta-") {
 			metadata[key] = header.Get(key)
+		} else if strings.HasPrefix(key, ssePrefix) || strings.HasPrefix(key, sseCopyPrefix) {
+			metadata[key] = header.Get(key)
 		}
 	}
 

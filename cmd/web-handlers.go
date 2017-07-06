@@ -561,6 +561,7 @@ type DownloadZipArgs struct {
 	BucketName string   `json:"bucketname"` // bucket name.
 }
 
+// TODO(aead): We cannot use ZIP with encrypted objects, or?!
 // Takes a list of objects and creates a zip file that sent as the response body.
 func (web *webAPIHandlers) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	objectAPI := web.ObjectAPI()
@@ -595,7 +596,7 @@ func (web *webAPIHandlers) DownloadZip(w http.ResponseWriter, r *http.Request) {
 	for _, object := range args.Objects {
 		// Writes compressed object file to the response.
 		zipit := func(objectName string) error {
-			info, err := objectAPI.GetObjectInfo(args.BucketName, objectName)
+			info, err := objectAPI.GetObjectInfo(args.BucketName, objectName, nil)
 			if err != nil {
 				return err
 			}

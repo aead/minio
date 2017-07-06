@@ -73,11 +73,13 @@ func (api gatewayAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	getObjectInfo := objectAPI.GetObjectInfo
+	var err error
+	var objInfo ObjectInfo
 	if reqAuthType == authTypeAnonymous {
-		getObjectInfo = objectAPI.AnonGetObjectInfo
+		objInfo, err = objectAPI.AnonGetObjectInfo(bucket, object)
+	} else {
+		objInfo, err = objectAPI.GetObjectInfo(bucket, object, nil)
 	}
-	objInfo, err := getObjectInfo(bucket, object)
 	if err != nil {
 		errorIf(err, "Unable to fetch object info.")
 		apiErr := toAPIErrorCode(err)
@@ -368,11 +370,13 @@ func (api gatewayAPIHandlers) HeadObjectHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	getObjectInfo := objectAPI.GetObjectInfo
+	var err error
+	var objInfo ObjectInfo
 	if reqAuthType == authTypeAnonymous {
-		getObjectInfo = objectAPI.AnonGetObjectInfo
+		objInfo, err = objectAPI.AnonGetObjectInfo(bucket, object)
+	} else {
+		objInfo, err = objectAPI.GetObjectInfo(bucket, object, nil)
 	}
-	objInfo, err := getObjectInfo(bucket, object)
 	if err != nil {
 		errorIf(err, "Unable to fetch object info.")
 		apiErr := toAPIErrorCode(err)

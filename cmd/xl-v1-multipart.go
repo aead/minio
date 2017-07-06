@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -551,7 +552,7 @@ func (xl xlObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, u
 		pipeWriter.Close() // Close writer explicitly signalling we wrote all data.
 	}()
 
-	partInfo, err := xl.PutObjectPart(dstBucket, dstObject, uploadID, partID, length, pipeReader, "", "", nil)
+	partInfo, err := xl.PutObjectPart(dstBucket, dstObject, uploadID, partID, length, pipeReader, "", "", encInfo)
 	if err != nil {
 		return pi, toObjectErr(err, dstBucket, dstObject)
 	}
@@ -657,6 +658,17 @@ func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, s
 	// Erasure code data and write across all disks.
 	secretKey := []byte{}
 	algorithm := DefaultBitrotAlgorithm
+	if encInfo != nil {
+		if xlMeta.IsEncrypted() {
+			if err = xlMeta.VerifyClientKey(encInfo); err != nil {
+				return pi, toObjectErr(err, bucket, object)
+			}
+		} else {
+			xlMeta.Encrypt(rand.Reader, encInfo)
+		}
+		secretKey = encInfo.SecretKey
+		algorithm = encInfo.Algorithm
+	}
 	file, err := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tmpPartPath, teeReader, allowEmpty, xlMeta.Erasure.BlockSize, xl.dataBlocks, xl.parityBlocks, secretKey, algorithm, xl.writeQuorum)
 	if err != nil {
 		return pi, toObjectErr(err, bucket, object)

@@ -755,7 +755,7 @@ func testAPIPutObjectStreamSigV4Handler(obj ObjectLayer, instanceType, bucketNam
 				t.Errorf("Test %d: %s: Object content differs from expected value.: %s", i+1, instanceType, string(actualContent))
 				continue
 			}
-			objInfo, err := obj.GetObjectInfo(testCase.bucketName, testCase.objectName)
+			objInfo, err := obj.GetObjectInfo(testCase.bucketName, testCase.objectName, nil)
 			if err != nil {
 				t.Fatalf("Test %d: %s: Failed to fetch the copied object: <ERROR> %s", i+1, instanceType, err)
 			}

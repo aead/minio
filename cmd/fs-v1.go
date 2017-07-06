@@ -466,7 +466,7 @@ func (fs fsObjects) getObjectInfo(bucket, object string) (oi ObjectInfo, e error
 }
 
 // GetObjectInfo - reads object metadata and replies back ObjectInfo.
-func (fs fsObjects) GetObjectInfo(bucket, object string) (oi ObjectInfo, e error) {
+func (fs fsObjects) GetObjectInfo(bucket, object string, encInfo *ServerSideEncryptionInfo) (oi ObjectInfo, e error) {
 	if err := checkGetObjArgs(bucket, object); err != nil {
 		return oi, err
 	}

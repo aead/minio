@@ -93,12 +93,25 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	metadata := extractMetadataFromHeader(r.Header)
+
+	var encInfo *ServerSideEncryptionInfo
+	if isServerSideEncryptonRequest(metadata) {
+		var err error
+		encInfo, err = ParseServerSideEncryptionInfo(metadata)
+		if err != nil {
+			traceError(err)
+			writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
+			return
+		}
+	}
+
 	// Lock the object before reading.
 	objectLock := globalNSMutex.NewNSLock(bucket, object)
 	objectLock.RLock()
 	defer objectLock.RUnlock()
 
-	objInfo, err := objectAPI.GetObjectInfo(bucket, object)
+	objInfo, err := objectAPI.GetObjectInfo(bucket, object, encInfo)
 	if err != nil {
 		errorIf(err, "Unable to fetch object info.")
 		apiErr := toAPIErrorCode(err)
@@ -155,7 +168,6 @@ func (api objectAPIHandlers) GetObjectHandler(w http.ResponseWriter, r *http.Req
 		}
 		return w.Write(p)
 	})
-	var encInfo *ServerSideEncryptionInfo
 
 	// Reads the object at startOffset and writes to mw.
 	if err = objectAPI.GetObject(bucket, object, startOffset, length, writer, encInfo); err != nil {
@@ -214,12 +226,25 @@ func (api objectAPIHandlers) HeadObjectHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	metadata := extractMetadataFromHeader(r.Header)
+
+	var encInfo *ServerSideEncryptionInfo
+	if isServerSideEncryptonRequest(metadata) {
+		var err error
+		encInfo, err = ParseServerSideEncryptionInfo(metadata)
+		if err != nil {
+			traceError(err)
+			writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
+			return
+		}
+	}
+
 	// Lock the object before reading.
 	objectLock := globalNSMutex.NewNSLock(bucket, object)
 	objectLock.RLock()
 	defer objectLock.RUnlock()
 
-	objInfo, err := objectAPI.GetObjectInfo(bucket, object)
+	objInfo, err := objectAPI.GetObjectInfo(bucket, object, encInfo)
 	if err != nil {
 		errorIf(err, "Unable to fetch object info.")
 		apiErr := toAPIErrorCode(err)
@@ -319,6 +344,18 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 		writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
 		return
 	}
+	metadata := extractMetadataFromHeader(r.Header)
+
+	var encInfo *ServerSideEncryptionInfo
+	if isServerSideEncryptonRequest(metadata) {
+		encInfo, err = ParseServerSideEncryptionCopyInfo(metadata)
+		if err != nil {
+			traceError(err)
+			writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
+			return
+		}
+		// TODO(aead): set encryption metadata again for get and put
+	}
 
 	cpSrcDstSame := srcBucket == dstBucket && srcObject == dstObject
 	// Hold write lock on destination since in both cases
@@ -341,7 +378,7 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 
 	}
 
-	objInfo, err := objectAPI.GetObjectInfo(srcBucket, srcObject)
+	objInfo, err := objectAPI.GetObjectInfo(srcBucket, srcObject, encInfo)
 	if err != nil {
 		errorIf(err, "Unable to fetch object info.")
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
@@ -640,6 +677,17 @@ func (api objectAPIHandlers) CopyObjectPartHandler(w http.ResponseWriter, r *htt
 		writeErrorResponse(w, ErrInvalidMaxParts, r.URL)
 		return
 	}
+	metadata := extractMetadataFromHeader(r.Header)
+
+	var encInfo *ServerSideEncryptionInfo
+	if isServerSideEncryptonRequest(metadata) {
+		encInfo, err = ParseServerSideEncryptionCopyInfo(metadata)
+		if err != nil {
+			traceError(err)
+			writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
+			return
+		}
+	}
 
 	// Hold read locks on source object only if we are
 	// going to read data from source object.
@@ -647,7 +695,7 @@ func (api objectAPIHandlers) CopyObjectPartHandler(w http.ResponseWriter, r *htt
 	objectSRLock.RLock()
 	defer objectSRLock.RUnlock()
 
-	objInfo, err := objectAPI.GetObjectInfo(srcBucket, srcObject)
+	objInfo, err := objectAPI.GetObjectInfo(srcBucket, srcObject, encInfo)
 	if err != nil {
 		errorIf(err, "Unable to fetch object info.")
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
@@ -688,7 +736,7 @@ func (api objectAPIHandlers) CopyObjectPartHandler(w http.ResponseWriter, r *htt
 
 	// Copy source object to destination, if source and destination
 	// object is same then only metadata is updated.
-	partInfo, err := objectAPI.CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, uploadID, partID, startOffset, length, nil)
+	partInfo, err := objectAPI.CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, uploadID, partID, startOffset, length, encInfo)
 	if err != nil {
 		errorIf(err, "Unable to perform CopyObjectPart %s/%s", srcBucket, srcObject)
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
@@ -766,6 +814,17 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 		writeErrorResponse(w, ErrInvalidMaxParts, r.URL)
 		return
 	}
+	metadata := extractMetadataFromHeader(r.Header)
+
+	var encInfo *ServerSideEncryptionInfo
+	if isServerSideEncryptonRequest(metadata) {
+		encInfo, err = ParseServerSideEncryptionInfo(metadata)
+		if err != nil {
+			traceError(err)
+			writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
+			return
+		}
+	}
 
 	var partInfo PartInfo
 	incomingMD5 := hex.EncodeToString(md5Bytes)
@@ -783,7 +842,7 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 			return
 		}
 		// No need to verify signature, anonymous request access is already allowed.
-		partInfo, err = objectAPI.PutObjectPart(bucket, object, uploadID, partID, size, r.Body, incomingMD5, sha256sum, nil)
+		partInfo, err = objectAPI.PutObjectPart(bucket, object, uploadID, partID, size, r.Body, incomingMD5, sha256sum, encInfo)
 	case authTypeStreamingSigned:
 		// Initialize stream signature verifier.
 		reader, s3Error := newSignV4ChunkedReader(r)
@@ -792,7 +851,7 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
-		partInfo, err = objectAPI.PutObjectPart(bucket, object, uploadID, partID, size, reader, incomingMD5, sha256sum, nil)
+		partInfo, err = objectAPI.PutObjectPart(bucket, object, uploadID, partID, size, reader, incomingMD5, sha256sum, encInfo)
 	case authTypeSignedV2, authTypePresignedV2:
 		s3Error := isReqAuthenticatedV2(r)
 		if s3Error != ErrNone {
@@ -800,7 +859,7 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 			writeErrorResponse(w, s3Error, r.URL)
 			return
 		}
-		partInfo, err = objectAPI.PutObjectPart(bucket, object, uploadID, partID, size, r.Body, incomingMD5, sha256sum, nil)
+		partInfo, err = objectAPI.PutObjectPart(bucket, object, uploadID, partID, size, r.Body, incomingMD5, sha256sum, encInfo)
 	case authTypePresigned, authTypeSigned:
 		if s3Error := reqSignatureV4Verify(r, serverConfig.GetRegion()); s3Error != ErrNone {
 			errorIf(errSignatureMismatch, "%s", dumpRequest(r))
@@ -811,7 +870,7 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 		if !skipContentSha256Cksum(r) {
 			sha256sum = r.Header.Get("X-Amz-Content-Sha256")
 		}
-		partInfo, err = objectAPI.PutObjectPart(bucket, object, uploadID, partID, size, r.Body, incomingMD5, sha256sum, nil)
+		partInfo, err = objectAPI.PutObjectPart(bucket, object, uploadID, partID, size, r.Body, incomingMD5, sha256sum, encInfo)
 	}
 	if err != nil {
 		errorIf(err, "Unable to create object part.")

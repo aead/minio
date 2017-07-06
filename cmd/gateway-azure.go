@@ -343,7 +343,7 @@ func (a *azureObjects) GetObject(bucket, object string, startOffset int64, lengt
 
 // GetObjectInfo - reads blob metadata properties and replies back ObjectInfo,
 // uses zure equivalent GetBlobProperties.
-func (a *azureObjects) GetObjectInfo(bucket, object string) (objInfo ObjectInfo, err error) {
+func (a *azureObjects) GetObjectInfo(bucket, object string, encInfo *ServerSideEncryptionInfo) (objInfo ObjectInfo, err error) {
 	blobMeta, err := a.client.GetBlobMetadata(bucket, object)
 	if err != nil {
 		return objInfo, azureToObjectError(traceError(err), bucket, object)
@@ -425,7 +425,7 @@ func (a *azureObjects) PutObject(bucket, object string, size int64, data io.Read
 		}
 	}
 
-	return a.GetObjectInfo(bucket, object)
+	return a.GetObjectInfo(bucket, object, nil)
 }
 
 // CopyObject - Copies a blob from source container to destination container.
@@ -435,7 +435,7 @@ func (a *azureObjects) CopyObject(srcBucket, srcObject, destBucket, destObject s
 	if err != nil {
 		return objInfo, azureToObjectError(traceError(err), srcBucket, srcObject)
 	}
-	return a.GetObjectInfo(destBucket, destObject)
+	return a.GetObjectInfo(destBucket, destObject, nil)
 }
 
 // DeleteObject - Deletes a blob on azure container, uses Azure
@@ -660,7 +660,7 @@ func (a *azureObjects) CompleteMultipartUpload(bucket, object, uploadID string, 
 		}
 	}
 	a.metaInfo.del(uploadID)
-	return a.GetObjectInfo(bucket, object)
+	return a.GetObjectInfo(bucket, object, nil)
 }
 
 // Copied from github.com/Azure/azure-sdk-for-go/storage/blob.go

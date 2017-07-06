@@ -686,8 +686,21 @@ func (adminAPI adminAPIHandlers) HealObjectHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	metadata := extractMetadataFromHeader(r.Header)
+
+	var encInfo *ServerSideEncryptionInfo
+	if isServerSideEncryptonRequest(metadata) {
+		var err error
+		encInfo, err = ParseServerSideEncryptionInfo(metadata)
+		if err != nil {
+			traceError(err)
+			writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
+			return
+		}
+	}
+
 	// Check if object exists.
-	if _, err := objLayer.GetObjectInfo(bucket, object); err != nil {
+	if _, err := objLayer.GetObjectInfo(bucket, object, encInfo); err != nil {
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}
@@ -755,9 +768,21 @@ func (adminAPI adminAPIHandlers) HealUploadHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	metadata := extractMetadataFromHeader(r.Header)
+
+	var encInfo *ServerSideEncryptionInfo
+	if isServerSideEncryptonRequest(metadata) {
+		var err error
+		encInfo, err = ParseServerSideEncryptionInfo(metadata)
+		if err != nil {
+			traceError(err)
+			writeErrorResponse(w, ErrInvalidMetadataDirective, r.URL)
+			return
+		}
+	}
+
 	// Check if upload exists.
-	if _, err := objLayer.GetObjectInfo(minioMetaMultipartBucket,
-		uploadObj); err != nil {
+	if _, err := objLayer.GetObjectInfo(minioMetaMultipartBucket, uploadObj, encInfo); err != nil {
 		writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 		return
 	}

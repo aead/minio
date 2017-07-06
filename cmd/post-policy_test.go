@@ -234,7 +234,7 @@ func testPostPolicyBucketHandler(obj ObjectLayer, instanceType string, t TestErr
 		}
 		// When the operation is successful, check if sending metadata is successful too
 		if rec.Code == http.StatusNoContent {
-			objInfo, err := obj.GetObjectInfo(bucketName, testCase.objectName+"/upload.txt")
+			objInfo, err := obj.GetObjectInfo(bucketName, testCase.objectName+"/upload.txt", nil)
 			if err != nil {
 				t.Error("Unexpected error: ", err)
 			}
@@ -493,7 +493,7 @@ func testPostPolicyBucketHandlerRedirect(obj ObjectLayer, instanceType string, t
 	}
 
 	// Get the uploaded object info
-	info, err := obj.GetObjectInfo(bucketName, targetObj)
+	info, err := obj.GetObjectInfo(bucketName, targetObj, nil)
 	if err != nil {
 		t.Error("Unexpected error: ", err)
 	}

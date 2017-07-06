@@ -220,6 +220,20 @@ func parseXLMetaMap(xlMetaBuf []byte) map[string]string {
 	return metaMap
 }
 
+func parseXLEncryptionInfo(xlMetaBuf []byte) *EncryptionInfo {
+	encInfoResult := gjson.GetBytes(xlMetaBuf, "encryption")
+	if !encInfoResult.Exists() {
+		return nil
+	}
+	return &EncryptionInfo{
+		Algorithm: encInfoResult.Get("algorithm").String(),
+		Hash:      encInfoResult.Get("hash").String(),
+		Salt:      encInfoResult.Get("salt").String(),
+		MetaNonce: encInfoResult.Get("nonce").String(),
+		MetaTag:   encInfoResult.Get("tag").String(),
+	}
+}
+
 // Constructs XLMetaV1 using `gjson` lib to retrieve each field.
 func xlMetaV1UnmarshalJSON(xlMetaBuf []byte) (xmv xlMetaV1, e error) {
 	xlMeta := xlMetaV1{}
@@ -239,6 +253,8 @@ func xlMetaV1UnmarshalJSON(xlMetaBuf []byte) (xmv xlMetaV1, e error) {
 	if err != nil {
 		return
 	}
+
+	xlMeta.Encryption = parseXLEncryptionInfo(xlMetaBuf)
 
 	// Parse the XL Parts.
 	xlMeta.Parts = parseXLParts(xlMetaBuf)

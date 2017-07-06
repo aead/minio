@@ -319,7 +319,7 @@ func fromMinioClientObjectInfo(bucket string, oi minio.ObjectInfo) ObjectInfo {
 }
 
 // GetObjectInfo reads object info and replies back ObjectInfo
-func (l *s3Objects) GetObjectInfo(bucket string, object string) (objInfo ObjectInfo, err error) {
+func (l *s3Objects) GetObjectInfo(bucket string, object string, encInfo *ServerSideEncryptionInfo) (objInfo ObjectInfo, err error) {
 	r := minio.NewHeadReqHeaders()
 	oi, err := l.Client.StatObject(bucket, object, r)
 	if err != nil {
@@ -366,7 +366,7 @@ func (l *s3Objects) CopyObject(srcBucket string, srcObject string, destBucket st
 		return objInfo, s3ToObjectError(traceError(err), srcBucket, srcObject)
 	}
 
-	oi, err := l.GetObjectInfo(destBucket, destObject)
+	oi, err := l.GetObjectInfo(destBucket, destObject, nil)
 	if err != nil {
 		return objInfo, s3ToObjectError(traceError(err), destBucket, destObject)
 	}
@@ -555,7 +555,7 @@ func (l *s3Objects) CompleteMultipartUpload(bucket string, object string, upload
 		return oi, s3ToObjectError(traceError(err), bucket, object)
 	}
 
-	return l.GetObjectInfo(bucket, object)
+	return l.GetObjectInfo(bucket, object, nil)
 }
 
 // SetBucketPolicies sets policy on bucket

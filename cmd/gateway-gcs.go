@@ -641,7 +641,7 @@ func fromGCSAttrsToObjectInfo(attrs *storage.ObjectAttrs) ObjectInfo {
 }
 
 // GetObjectInfo - reads object info and replies back ObjectInfo
-func (l *gcsGateway) GetObjectInfo(bucket string, object string) (ObjectInfo, error) {
+func (l *gcsGateway) GetObjectInfo(bucket string, object string, encInfo *ServerSideEncryptionInfo) (ObjectInfo, error) {
 	// if we want to mimic S3 behavior exactly, we need to verify if bucket exists first,
 	// otherwise gcs will just return object not exist in case of non-existing bucket
 	if _, err := l.client.Bucket(bucket).Attrs(l.ctx); err != nil {

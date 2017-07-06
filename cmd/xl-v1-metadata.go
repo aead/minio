@@ -109,6 +109,21 @@ func NewChecksumInfo(name string, algorithm bitrot.Algorithm, key, hash []byte) 
 	}
 }
 
+// EncryptionInfo contains information about the encryption material for server-side-encryption.
+type EncryptionInfo struct {
+	// The encryption algorithm
+	Algorithm string `json:"algorithm"`
+	// HMAC of the client provided key
+	Hash string `json:"hash"`
+	// Salt, used to create the HMAC of the client provided key
+	Salt string `json:"salt"`
+
+	// Nonce for en/decrypting the user-defined metadata
+	MetaNonce string `json:"nonce"`
+	// The authentication tag of the encrypted user-defined metadata
+	MetaTag string `json:"tag"`
+}
+
 // erasureInfo - carries erasure coding related information, block
 // distribution and checksums.
 type erasureInfo struct {
@@ -156,6 +171,9 @@ type xlMetaV1 struct {
 	Stat    statInfo `json:"stat"`    // Stat of the current object `xl.json`.
 	// Erasure coded info for the current object `xl.json`.
 	Erasure erasureInfo `json:"erasure"`
+	// Encryption contains information for verifying the client provided key and for
+	// decrypting the metadata map. It is nil if the object is not encrypted.
+	Encryption *EncryptionInfo `json:"encryption,omitempty"`
 	// Minio release tag for current object `xl.json`.
 	Minio struct {
 		Release string `json:"release"`

@@ -14,14 +14,19 @@ import (
 )
 
 const (
-	ssePrefix         = "X-Amz-Server-Side-Encryption-Customer-"
+	ssePrefix     = "X-Amz-Server-Side-Encryption-Customer-"
+	sseCopyPrefix = "X-Amz-Copy-Source​-Server-Side​-Encryption​-Customer-"
+
 	sseAlgorithm      = ssePrefix + "Algorithm"
 	sseCustomerKey    = ssePrefix + "Key"
 	sseCustomerKeyMD5 = ssePrefix + "Key-Md5"
 
-	sseSecretKeyMAC  = ssePrefix + "Key-Hash"
-	sseSecretKeySalt = ssePrefix + "Key-Salt"
+	sseCopyAlgorithm      = sseCopyPrefix + "Algorithm"
+	sseCopyCustomerKey    = sseCopyPrefix + "Key"
+	sseCopyCustomerKeyMD5 = sseCopyPrefix + "Key-Md5"
 )
+
+var sseHeaders = [...]string{sseAlgorithm, sseCopyAlgorithm, sseCustomerKey, sseCopyCustomerKey, sseCustomerKeyMD5, sseCopyCustomerKeyMD5}
 
 // ServerSideEncryptionInfo contains the algorithm and the client provided
 // secret key for server-side-encryption (SSE-C)
@@ -30,69 +35,188 @@ type ServerSideEncryptionInfo struct {
 	SecretKey []byte
 }
 
-// WriteToMetadata generates a random salt and the HMAC of the secret key and stores both values
-// in the provided metadata map. This is necessary to verify the client provided encryption key.
-func (e *ServerSideEncryptionInfo) WriteToMetadata(metadata map[string]string, random io.Reader) error {
-	// TODO(aead): Think about it - there are actually better constructions (like HKDF or even pwd-based KDF)?!
-	salt := make([]byte, 32)
-	if _, err := io.ReadFull(random, salt); err != nil {
-		return err
+func isServerSideEncryptonRequest(metadata map[string]string) bool {
+	for _, header := range sseHeaders {
+		if _, ok := metadata[header]; ok {
+			return ok
+		}
 	}
-	mac := hmac.New(sha256.New, e.SecretKey)
-	if _, err := mac.Write(salt); err != nil {
-		return err
-	}
-	metadata[sseSecretKeyMAC] = hex.EncodeToString(mac.Sum(nil))
-	metadata[sseSecretKeySalt] = hex.EncodeToString(salt)
-	return nil
+	return false
 }
 
-// VerifyHMAC reads the salt the HMAC of the secret encryption key from the metadata, computes the
-// HMAC of the client provided key and compares both HMAC values. It returns an error if both
-// HMAC values don't match.
-func (e *ServerSideEncryptionInfo) VerifyHMAC(metadata map[string]string) error {
-	hash, err := hex.DecodeString(metadata[sseSecretKeyMAC])
+// IsEncrypted retruns true if the object which is referenced by the metadata is encrypted.
+func (xl *xlMetaV1) IsEncrypted() bool { return xl.Encryption != nil }
+
+// VerifyClientKey takes the client-provided encryption info and verifies that the
+// provided key can be used to decrypt the object. It retruns an error if the provided
+// encryption info cannot be used to decrypt the referenced object.
+func (xl *xlMetaV1) VerifyClientKey(encInfo *ServerSideEncryptionInfo) error {
+	if encInfo == nil {
+		return traceError(errors.New("failed to verify client key: no key provided"))
+	}
+	if !encInfo.Algorithm.IsCipher() {
+		return Errorf("failed to verify client key: algorithm %s is not a cipher", encInfo.Algorithm)
+	}
+	if len(encInfo.SecretKey) != 32 {
+		return Errorf("failed to verify client key: bad secret key size: got: #%d , want: #%d", len(encInfo.SecretKey), 32)
+	}
+	if !xl.IsEncrypted() {
+		return traceError(errors.New("failed to verify client key: object is not encrypted"))
+	}
+
+	if encInfo.Algorithm.String() != xl.Encryption.Algorithm {
+		return Errorf("failed to verify client key: algorithm mismatch: got: %s , want: %s", encInfo.Algorithm, xl.Encryption.Algorithm)
+	}
+
+	hash, err := hex.DecodeString(xl.Encryption.Hash)
 	if err != nil {
 		return traceError(err)
 	}
-	salt, err := hex.DecodeString(metadata[sseSecretKeySalt])
+	salt, err := hex.DecodeString(xl.Encryption.Salt)
 	if err != nil {
 		return traceError(err)
 	}
-	mac := hmac.New(sha256.New, e.SecretKey)
+	mac := hmac.New(sha256.New, encInfo.SecretKey)
 	if _, err = mac.Write(salt); err != nil {
 		return traceError(err)
 	}
-	sum := mac.Sum(nil)
-	if subtle.ConstantTimeCompare(sum, hash) == 1 {
-		err = errors.New("secret key checksum mismatch")
+	if sum := mac.Sum(nil); subtle.ConstantTimeCompare(sum, hash) != 1 {
+		return Errorf("failed to verify client key: HMAC mismatch: got: %s , want: %s", hex.EncodeToString(sum), hex.EncodeToString(hash))
 	}
 	return nil
 }
 
-func isServerSideEncryptonRequest(metadata map[string]string) bool {
-	_, ok := metadata[sseAlgorithm]
-	return ok
+// Encrypt encrypts the user-provided metadata and stores a HMAC hash of the client provided key
+// in the XL metadata. It returns an error if the encryption process fails.
+func (xl *xlMetaV1) Encrypt(random io.Reader, encInfo *ServerSideEncryptionInfo) error {
+	if encInfo == nil {
+		return traceError(errors.New("failed to encrypt metadata: no key provided"))
+	}
+	if !encInfo.Algorithm.IsCipher() {
+		return Errorf("failed to encrypt metadata: algorithm %s is not a cipher", encInfo.Algorithm)
+	}
+	if len(encInfo.SecretKey) != 32 {
+		return Errorf("failed to encrypt metadata: bad secret key size: got: #%d , want: #%d", len(encInfo.SecretKey), 32)
+	}
+
+	salt := make([]byte, 32)
+	if _, err := io.ReadFull(random, salt); err != nil {
+		return traceError(err)
+	}
+	mac := hmac.New(sha256.New, encInfo.SecretKey)
+	if _, err := mac.Write(salt); err != nil {
+		return traceError(err)
+	}
+	hash := mac.Sum(nil)
+
+	nonce := make([]byte, 12)
+	if _, err := io.ReadFull(random, nonce); err != nil {
+		return traceError(err)
+	}
+	if keyLen := len(encInfo.SecretKey) + len(nonce); keyLen != encInfo.Algorithm.KeySize() {
+		return Errorf("failed to decrypt metadata: bad key-nonce length: got #%d , want #%d", keyLen, encInfo.Algorithm.KeySize())
+	}
+
+	metaKey := make([]byte, encInfo.Algorithm.KeySize())
+	copy(metaKey, nonce)
+	copy(metaKey[len(nonce):], encInfo.SecretKey)
+
+	cipher, err := encInfo.Algorithm.New(metaKey, bitrot.Verify)
+	if err != nil {
+		return traceError(err)
+	}
+	encMetadata := make(map[string]string, len(xl.Meta))
+	for k, v := range xl.Meta {
+		key, value := []byte(k), []byte(v)
+		cipher.Write(key)
+		cipher.Write(value)
+		encMetadata[hex.EncodeToString(key)] = hex.EncodeToString(value)
+	}
+	xl.Meta = encMetadata
+	xl.Encryption = &EncryptionInfo{
+		Algorithm: encInfo.Algorithm.String(),
+		Hash:      hex.EncodeToString(hash),
+		Salt:      hex.EncodeToString(salt),
+		MetaNonce: hex.EncodeToString(nonce),
+		MetaTag:   hex.EncodeToString(cipher.Sum(nil)),
+	}
+	return nil
 }
 
-func isEncryptedObject(metadata map[string]string) bool {
-	_, okSalt := metadata[sseSecretKeySalt]
-	_, okMAC := metadata[sseSecretKeyMAC]
-	return okMAC && okSalt
+// Decrypt decrypts the user-provided metadata. It returns an error if the decryption process fails.
+// The client provided key should be verified before.
+func (xl *xlMetaV1) Decrypt(encInfo *ServerSideEncryptionInfo) error {
+	if encInfo == nil {
+		return traceError(errors.New("failed to decrypt metadata: no key provided"))
+	}
+	if !encInfo.Algorithm.IsCipher() {
+		return Errorf("failed to decrypt metadata: algorithm %s is not a cipher", encInfo.Algorithm)
+	}
+	if len(encInfo.SecretKey) != 32 {
+		return Errorf("failed to decrypt metadata: bad secret key size: got: #%d , want: #%d", len(encInfo.SecretKey), 32)
+	}
+	if encInfo.Algorithm.String() != xl.Encryption.Algorithm {
+		return Errorf("failed to decrypt metadata: algorithm mismatch: got: %s , want: %s", encInfo.Algorithm, xl.Encryption.Algorithm)
+	}
+	if !xl.IsEncrypted() {
+		return traceError(errors.New("failed to decrypt metadata: object is not encrypted"))
+	}
+
+	nonce, err := hex.DecodeString(xl.Encryption.MetaNonce)
+	if err != nil {
+		return traceError(err)
+	}
+	tag, err := hex.DecodeString(xl.Encryption.MetaTag)
+	if err != nil {
+		return traceError(err)
+	}
+	if keyLen := len(encInfo.SecretKey) + len(nonce); keyLen != encInfo.Algorithm.KeySize() {
+		return Errorf("failed to decrypt metadata: bad key-nonce length: got #%d , want #%d", keyLen, encInfo.Algorithm.KeySize())
+	}
+
+	metaKey := make([]byte, encInfo.Algorithm.KeySize())
+	copy(metaKey, nonce)
+	copy(metaKey[len(nonce):], encInfo.SecretKey)
+
+	cipher, err := encInfo.Algorithm.New(metaKey, bitrot.Verify)
+	if err != nil {
+		return traceError(err)
+	}
+	decMetadata := make(map[string]string, len(xl.Meta))
+	for k, v := range xl.Meta {
+		key, err := hex.DecodeString(k)
+		if err != nil {
+			return traceError(err)
+		}
+		value, err := hex.DecodeString(v)
+		if err != nil {
+			return traceError(err)
+		}
+		cipher.Write(key)
+		cipher.Write(value)
+		decMetadata[string(key)] = string(value)
+	}
+	if sum := cipher.Sum(nil); subtle.ConstantTimeCompare(sum, tag) != 1 {
+		return traceError(errors.New("failed to decrypt metadata: authentication error"))
+	}
+	xl.Meta = decMetadata
+	return nil
 }
 
 // ParseServerSideEncryptionInfo takes the client-provided headers and extracts the ServerSideEncryptionInfo.
 // It returns an error if the client provided metadata does not contain a valid encryption request.
 func ParseServerSideEncryptionInfo(metadata map[string]string) (info *ServerSideEncryptionInfo, err error) {
-	if metadata[sseAlgorithm] != "AES256" { // this is currently hardcoded by AWS - whatever you mean with "AES256", Amazon. ¯\_(ツ)_/¯
+	var base64Key, base64KeyMD5 string
+	// this is currently hardcoded by AWS - whatever you mean with "AES256", Amazon. ¯\_(ツ)_/¯
+	if metadata[sseAlgorithm] != "AES256" {
 		return info, Errorf("missing %s", sseAlgorithm)
 	}
-	bas64Key := metadata[sseCustomerKey]
-	if bas64Key == "" {
+	base64Key = metadata[sseCustomerKey]
+	if base64Key == "" {
 		return info, Errorf("missing %s", sseCustomerKey)
 	}
-	bas64KeyMD5 := metadata[sseCustomerKeyMD5]
-	if bas64Key == "" {
+	base64KeyMD5 = metadata[sseCustomerKeyMD5]
+	if base64Key == "" {
 		return info, Errorf("missing %s", sseCustomerKeyMD5)
 	}
 	delete(metadata, sseAlgorithm)
@@ -103,11 +227,11 @@ func ParseServerSideEncryptionInfo(metadata map[string]string) (info *ServerSide
 	if bitrot.AESGCM.Available() {
 		algorithm = bitrot.AESGCM
 	}
-	secretKey, err := base64.StdEncoding.DecodeString(bas64Key)
+	secretKey, err := base64.StdEncoding.DecodeString(base64Key)
 	if err != nil {
 		return info, err
 	}
-	keyMD5, err := base64.StdEncoding.DecodeString(bas64KeyMD5)
+	keyMD5, err := base64.StdEncoding.DecodeString(base64KeyMD5)
 	if err != nil {
 		return info, err
 	}
@@ -120,36 +244,43 @@ func ParseServerSideEncryptionInfo(metadata map[string]string) (info *ServerSide
 	return &ServerSideEncryptionInfo{Algorithm: algorithm, SecretKey: secretKey}, nil
 }
 
-func parseServerSideEncryptionCopyHeaders(metadata map[string]string) (alg bitrot.Algorithm, key []byte, err error) {
-	algorithm := metadata["x-amz-copy-source​-server-side​-encryption​-customer-algorithm"]
-	if algorithm != "AES256" { // this is currently hardcoded by AWS - whatever you mean with "AES256", Amazon. ¯\_(ツ)_/¯
-		return bitrot.UnknownAlgorithm, nil, errors.New("missing x-amz-copy-source​-server-side​-encryption​-customer-algorithm")
+// ParseServerSideEncryptionCopyInfo takes the client-provided headers and extracts the ServerSideEncryptionInfo.
+// It returns an error if the client provided metadata does not contain a valid encryption request.
+func ParseServerSideEncryptionCopyInfo(metadata map[string]string) (info *ServerSideEncryptionInfo, err error) {
+	var base64Key, base64KeyMD5 string
+	// this is currently hardcoded by AWS - whatever you mean with "AES256", Amazon. ¯\_(ツ)_/¯
+	if metadata[sseCopyAlgorithm] != "AES256" {
+		return info, Errorf("missing %s", sseCopyAlgorithm)
 	}
-	bas64Key := metadata["x-amz-copy-source​-server-side​-encryption​-customer-key"]
-	if bas64Key == "" {
-		return bitrot.UnknownAlgorithm, nil, errors.New("missing x-amz-copy-source​-server-side​-encryption​-customer-key")
+	base64Key = metadata[sseCopyCustomerKey]
+	if base64Key == "" {
+		return info, Errorf("missing %s", sseCopyCustomerKey)
 	}
-	bas64KeyMD5 := metadata["x-amz-copy-source-​server-side​-encryption​-customer-key-MD5"]
-	if bas64Key == "" {
-		return bitrot.UnknownAlgorithm, nil, errors.New("missing x-amz-copy-source-​server-side​-encryption​-customer-key-MD5")
+	base64KeyMD5 = metadata[sseCopyCustomerKeyMD5]
+	if base64Key == "" {
+		return info, Errorf("missing %s", sseCopyCustomerKeyMD5)
 	}
-	alg = bitrot.ChaCha20Poly1305
+	delete(metadata, sseCopyAlgorithm)
+	delete(metadata, sseCopyCustomerKey)
+	delete(metadata, sseCopyCustomerKeyMD5)
+
+	algorithm := bitrot.ChaCha20Poly1305
 	if bitrot.AESGCM.Available() {
-		alg = bitrot.AESGCM
+		algorithm = bitrot.AESGCM
 	}
-	key, err = base64.StdEncoding.DecodeString(bas64Key)
+	secretKey, err := base64.StdEncoding.DecodeString(base64Key)
 	if err != nil {
-		return bitrot.UnknownAlgorithm, nil, err
+		return info, err
 	}
-	keyMD5, err := base64.StdEncoding.DecodeString(bas64KeyMD5)
+	keyMD5, err := base64.StdEncoding.DecodeString(base64KeyMD5)
 	if err != nil {
-		return bitrot.UnknownAlgorithm, nil, err
+		return info, err
 	}
-	if len(key) != 32 { // SSE-Keys must be 256 bit
-		return bitrot.UnknownAlgorithm, nil, errors.New("server-side-encryption key is not 256 long")
+	if len(secretKey) != 32 { // SSE-Keys must be 256 bit
+		return info, errors.New("server-side-encryption key is not 256 long")
 	}
-	if sum := md5.Sum(key); subtle.ConstantTimeCompare(sum[:], keyMD5) != 1 {
-		return bitrot.UnknownAlgorithm, nil, errors.New("server-side-encryption key does not match MD5 checksum")
+	if sum := md5.Sum(secretKey); subtle.ConstantTimeCompare(sum[:], keyMD5) != 1 {
+		return info, errors.New("server-side-encryption key does not match MD5 checksum")
 	}
-	return alg, key, nil
+	return &ServerSideEncryptionInfo{Algorithm: algorithm, SecretKey: secretKey}, nil
 }

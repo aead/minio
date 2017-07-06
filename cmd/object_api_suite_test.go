@@ -217,7 +217,7 @@ func testMultipleObjectCreation(obj ObjectLayer, instanceType string, c TestErrH
 			c.Errorf("%s: Mismatch of GetObject data with the expected one.", instanceType)
 		}
 
-		objInfo, err := obj.GetObjectInfo("bucket", key)
+		objInfo, err := obj.GetObjectInfo("bucket", key, nil)
 		if err != nil {
 			c.Fatalf("%s: <ERROR> %s", instanceType, err)
 		}
@@ -703,7 +703,7 @@ func testNonExistantObjectInBucket(obj ObjectLayer, instanceType string, c TestE
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}
 
-	_, err = obj.GetObjectInfo("bucket", "dir1")
+	_, err = obj.GetObjectInfo("bucket", "dir1", nil)
 	if err == nil {
 		c.Fatalf("%s: Expected error but found nil", instanceType)
 	}
@@ -764,7 +764,7 @@ func testGetDirectoryReturnsObjectNotFound(obj ObjectLayer, instanceType string,
 	}
 
 	for i, testCase := range testCases {
-		_, expectedErr := obj.GetObjectInfo(bucketName, testCase.dir)
+		_, expectedErr := obj.GetObjectInfo(bucketName, testCase.dir, nil)
 		if expectedErr != nil {
 			expectedErr = errorCause(expectedErr)
 			if expectedErr.Error() != testCase.err.Error() {
@@ -791,7 +791,7 @@ func testContentType(obj ObjectLayer, instanceType string, c TestErrHandler) {
 	if err != nil {
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}
-	objInfo, err := obj.GetObjectInfo("bucket", "minio.png")
+	objInfo, err := obj.GetObjectInfo("bucket", "minio.png", nil)
 	if err != nil {
 		c.Fatalf("%s: <ERROR> %s", instanceType, err)
 	}

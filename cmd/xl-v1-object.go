@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/hex"
 	"hash"
 	"io"
@@ -164,6 +165,14 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 	if err != nil {
 		return err
 	}
+	var secretKey []byte
+	if encInfo != nil {
+		if err = xlMeta.VerifyClientKey(encInfo); err != nil {
+			return err
+		}
+		secretKey = encInfo.SecretKey
+	}
+
 	// Reorder online disks based on erasure distribution order.
 	onlineDisks = shuffleDisks(onlineDisks, xlMeta.Erasure.Distribution)
 
@@ -292,7 +301,6 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 			}
 		}
 		// Start erasure decoding and writing to the client.
-		secretKey := []byte{} // TODO(aead): replace by user provided key
 		file, err := erasureReadFile(mw, onlineDisks, bucket, pathJoin(object, partName), partOffset, readSize, partSize, xlMeta.Erasure.BlockSize, xlMeta.Erasure.DataBlocks, xlMeta.Erasure.ParityBlocks, secretKey, keys, checksums, algorithm, pool)
 		if err != nil {
 			errorIf(err, "Unable to read %s of the object `%s/%s`.", partName, bucket, object)
@@ -312,7 +320,7 @@ func (xl xlObjects) GetObject(bucket, object string, startOffset int64, length i
 }
 
 // GetObjectInfo - reads object metadata and replies back ObjectInfo.
-func (xl xlObjects) GetObjectInfo(bucket, object string) (oi ObjectInfo, e error) {
+func (xl xlObjects) GetObjectInfo(bucket, object string, encInfo *ServerSideEncryptionInfo) (oi ObjectInfo, e error) {
 	if err := checkGetObjArgs(bucket, object); err != nil {
 		return oi, err
 	}
@@ -532,6 +540,18 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 	partsMetadata := make([]xlMetaV1, len(xl.storageDisks))
 	xlMeta := newXLMetaV1(object, xl.dataBlocks, xl.parityBlocks)
 
+	var secretKey []byte
+	var encInfo *ServerSideEncryptionInfo
+	algorithm := DefaultBitrotAlgorithm
+	if isServerSideEncryptonRequest(metadata) {
+		encInfo, err = ParseServerSideEncryptionInfo(metadata)
+		if err != nil {
+			return ObjectInfo{}, toObjectErr(err, bucket, object)
+		}
+		algorithm = encInfo.Algorithm
+		secretKey = encInfo.SecretKey
+	}
+
 	// Initialize xl meta.
 	for index := range partsMetadata {
 		partsMetadata[index] = xlMeta
@@ -580,8 +600,6 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 		allowEmptyPart := partIdx == 1
 
 		// Erasure code data and write across all disks.
-		secretKey := []byte{}
-		algorithm := DefaultBitrotAlgorithm
 		file, erasureErr := erasureCreateFile(onlineDisks, minioMetaTmpBucket, tempErasureObj, partReader, allowEmptyPart, partsMetadata[0].Erasure.BlockSize, partsMetadata[0].Erasure.DataBlocks, partsMetadata[0].Erasure.ParityBlocks, secretKey, algorithm, xl.writeQuorum)
 		if erasureErr != nil {
 			return ObjectInfo{}, toObjectErr(erasureErr, minioMetaTmpBucket, tempErasureObj)
@@ -684,10 +702,19 @@ func (xl xlObjects) PutObject(bucket string, object string, size int64, data io.
 		}
 	}
 
+	// Encrypt user provided metadata and store HMAC of client provided key
+	xlMeta.Meta = metadata
+	if encInfo != nil {
+		if err = xlMeta.Encrypt(rand.Reader, encInfo); err != nil {
+			return ObjectInfo{}, toObjectErr(err, bucket, object)
+		}
+	}
+
 	// Fill all the necessary metadata.
 	// Update `xl.json` content on each disks.
 	for index := range partsMetadata {
-		partsMetadata[index].Meta = metadata
+		partsMetadata[index].Encryption = xlMeta.Encryption
+		partsMetadata[index].Meta = xlMeta.Meta
 		partsMetadata[index].Stat.Size = size
 		partsMetadata[index].Stat.ModTime = modTime
 	}

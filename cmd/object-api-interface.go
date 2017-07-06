@@ -33,7 +33,7 @@ type ObjectLayer interface {
 
 	// Object operations.
 	GetObject(bucket, object string, startOffset int64, length int64, writer io.Writer, encInfo *ServerSideEncryptionInfo) (err error)
-	GetObjectInfo(bucket, object string) (objInfo ObjectInfo, err error)
+	GetObjectInfo(bucket, object string, encInfo *ServerSideEncryptionInfo) (objInfo ObjectInfo, err error)
 	PutObject(bucket, object string, size int64, data io.Reader, metadata map[string]string, sha256sum string) (objInfo ObjectInfo, err error)
 	CopyObject(srcBucket, srcObject, destBucket, destObject string, metadata map[string]string) (objInfo ObjectInfo, err error)
 	DeleteObject(bucket, object string) error
