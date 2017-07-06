@@ -534,7 +534,7 @@ func (xl xlObjects) NewMultipartUpload(bucket, object string, meta map[string]st
 // data is read from an existing object.
 //
 // Implements S3 compatible Upload Part Copy API.
-func (xl xlObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, uploadID string, partID int, startOffset int64, length int64) (pi PartInfo, e error) {
+func (xl xlObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, uploadID string, partID int, startOffset int64, length int64, encInfo *ServerSideEncryptionInfo) (pi PartInfo, e error) {
 	if err := checkNewMultipartArgs(srcBucket, srcObject, xl); err != nil {
 		return pi, err
 	}
@@ -551,7 +551,7 @@ func (xl xlObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, u
 		pipeWriter.Close() // Close writer explicitly signalling we wrote all data.
 	}()
 
-	partInfo, err := xl.PutObjectPart(dstBucket, dstObject, uploadID, partID, length, pipeReader, "", "")
+	partInfo, err := xl.PutObjectPart(dstBucket, dstObject, uploadID, partID, length, pipeReader, "", "", nil)
 	if err != nil {
 		return pi, toObjectErr(err, dstBucket, dstObject)
 	}
@@ -568,7 +568,7 @@ func (xl xlObjects) CopyObjectPart(srcBucket, srcObject, dstBucket, dstObject, u
 // of the multipart transaction.
 //
 // Implements S3 compatible Upload Part API.
-func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string) (pi PartInfo, e error) {
+func (xl xlObjects) PutObjectPart(bucket, object, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string, encInfo *ServerSideEncryptionInfo) (pi PartInfo, e error) {
 	if err := checkPutObjectPartArgs(bucket, object, xl); err != nil {
 		return pi, err
 	}

@@ -456,7 +456,7 @@ func (l *s3Objects) NewMultipartUpload(bucket string, object string, metadata ma
 }
 
 // CopyObjectPart copy part of object to other bucket and object
-func (l *s3Objects) CopyObjectPart(srcBucket string, srcObject string, destBucket string, destObject string, uploadID string, partID int, startOffset int64, length int64) (info PartInfo, err error) {
+func (l *s3Objects) CopyObjectPart(srcBucket string, srcObject string, destBucket string, destObject string, uploadID string, partID int, startOffset int64, length int64, encInfo *ServerSideEncryptionInfo) (info PartInfo, err error) {
 	// FIXME: implement CopyObjectPart
 	return PartInfo{}, traceError(NotImplemented{})
 }
@@ -472,7 +472,7 @@ func fromMinioClientObjectPart(op minio.ObjectPart) PartInfo {
 }
 
 // PutObjectPart puts a part of object in bucket
-func (l *s3Objects) PutObjectPart(bucket string, object string, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string) (pi PartInfo, e error) {
+func (l *s3Objects) PutObjectPart(bucket string, object string, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string, encInfo *ServerSideEncryptionInfo) (pi PartInfo, e error) {
 	md5HexBytes, err := hex.DecodeString(md5Hex)
 	if err != nil {
 		return pi, err

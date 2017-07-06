@@ -53,12 +53,12 @@ func TestRepeatPutObjectPart(t *testing.T) {
 	}
 	fiveMBBytes := bytes.Repeat([]byte("a"), 5*humanize.MiByte)
 	md5Hex := getMD5Hash(fiveMBBytes)
-	_, err = objLayer.PutObjectPart("bucket1", "mpartObj1", uploadID, 1, 5*humanize.MiByte, bytes.NewReader(fiveMBBytes), md5Hex, "")
+	_, err = objLayer.PutObjectPart("bucket1", "mpartObj1", uploadID, 1, 5*humanize.MiByte, bytes.NewReader(fiveMBBytes), md5Hex, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// PutObjectPart should succeed even if part already exists. ref: https://github.com/minio/minio/issues/1930
-	_, err = objLayer.PutObjectPart("bucket1", "mpartObj1", uploadID, 1, 5*humanize.MiByte, bytes.NewReader(fiveMBBytes), md5Hex, "")
+	_, err = objLayer.PutObjectPart("bucket1", "mpartObj1", uploadID, 1, 5*humanize.MiByte, bytes.NewReader(fiveMBBytes), md5Hex, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

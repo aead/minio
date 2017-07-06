@@ -1082,7 +1082,7 @@ func TestHealUploadHandler(t *testing.T) {
 	// Upload a part.
 	partID := 1
 	_, err = adminTestBed.objLayer.PutObjectPart(bucketName, objName, uploadID,
-		partID, int64(len("hello")), bytes.NewReader([]byte("hello")), "", "")
+		partID, int64(len("hello")), bytes.NewReader([]byte("hello")), "", "", nil)
 	if err != nil {
 		t.Fatalf("Failed to upload part %d of %s/%s - %v", partID,
 			bucketName, objName, err)

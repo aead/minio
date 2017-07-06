@@ -484,7 +484,7 @@ func (a *azureObjects) NewMultipartUpload(bucket, object string, metadata map[st
 }
 
 // CopyObjectPart - Not implemented.
-func (a *azureObjects) CopyObjectPart(srcBucket, srcObject, destBucket, destObject string, uploadID string, partID int, startOffset int64, length int64) (info PartInfo, err error) {
+func (a *azureObjects) CopyObjectPart(srcBucket, srcObject, destBucket, destObject string, uploadID string, partID int, startOffset int64, length int64, encInfo *ServerSideEncryptionInfo) (info PartInfo, err error) {
 	return info, traceError(NotImplemented{})
 }
 
@@ -512,7 +512,7 @@ func azureParseBlockID(blockID string) (int, string, error) {
 }
 
 // PutObjectPart - Use Azure equivalent PutBlockWithLength.
-func (a *azureObjects) PutObjectPart(bucket, object, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string) (info PartInfo, err error) {
+func (a *azureObjects) PutObjectPart(bucket, object, uploadID string, partID int, size int64, data io.Reader, md5Hex string, sha256sum string, encInfo *ServerSideEncryptionInfo) (info PartInfo, err error) {
 	if meta := a.metaInfo.get(uploadID); meta == nil {
 		return info, traceError(InvalidUploadID{})
 	}

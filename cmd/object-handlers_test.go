@@ -2159,7 +2159,7 @@ func testAPICompleteMultipartHandler(obj ObjectLayer, instanceType, bucketName s
 	// Iterating over creatPartCases to generate multipart chunks.
 	for _, part := range parts {
 		_, err = obj.PutObjectPart(part.bucketName, part.objName, part.uploadID, part.PartID, part.intputDataSize,
-			bytes.NewBufferString(part.inputReaderData), part.inputMd5, "")
+			bytes.NewBufferString(part.inputReaderData), part.inputMd5, "", nil)
 		if err != nil {
 			t.Fatalf("%s : %s", instanceType, err)
 		}
@@ -2514,7 +2514,7 @@ func testAPIAbortMultipartHandler(obj ObjectLayer, instanceType, bucketName stri
 	// Iterating over createPartCases to generate multipart chunks.
 	for _, part := range parts {
 		_, err = obj.PutObjectPart(part.bucketName, part.objName, part.uploadID, part.PartID, part.intputDataSize,
-			bytes.NewBufferString(part.inputReaderData), part.inputMd5, "")
+			bytes.NewBufferString(part.inputReaderData), part.inputMd5, "", nil)
 		if err != nil {
 			t.Fatalf("%s : %s", instanceType, err)
 		}
@@ -3362,7 +3362,7 @@ func testAPIListObjectPartsHandler(obj ObjectLayer, instanceType, bucketName str
 
 	// create an object Part, will be used to test list object parts.
 	_, err = obj.PutObjectPart(bucketName, testObject, uploadID, 1, int64(len("hello")), bytes.NewReader([]byte("hello")),
-		"5d41402abc4b2a76b9719d911017c592", "")
+		"5d41402abc4b2a76b9719d911017c592", "", nil)
 	if err != nil {
 		t.Fatalf("Minio %s : %s.", instanceType, err)
 	}

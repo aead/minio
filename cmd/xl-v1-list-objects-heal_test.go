@@ -180,7 +180,7 @@ func TestListUploadsHeal(t *testing.T) {
 	// Upload a part.
 	data := bytes.Repeat([]byte("a"), 1024)
 	_, err = xl.PutObjectPart(bucketName, objName, uploadID, 1,
-		int64(len(data)), bytes.NewReader(data), "", "")
+		int64(len(data)), bytes.NewReader(data), "", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -117,7 +117,7 @@ func runPutObjectPartBenchmark(b *testing.B, obj ObjectLayer, partSize int) {
 			metadata := make(map[string]string)
 			metadata["etag"] = getMD5Hash([]byte(textPartData))
 			var partInfo PartInfo
-			partInfo, err = obj.PutObjectPart(bucket, object, uploadID, j, int64(len(textPartData)), bytes.NewBuffer(textPartData), metadata["etag"], sha256sum)
+			partInfo, err = obj.PutObjectPart(bucket, object, uploadID, j, int64(len(textPartData)), bytes.NewBuffer(textPartData), metadata["etag"], sha256sum, nil)
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -107,7 +107,7 @@ func testMultipartObjectCreation(obj ObjectLayer, instanceType string, c TestErr
 		expectedETaghex := getMD5Hash(data)
 
 		var calcPartInfo PartInfo
-		calcPartInfo, err = obj.PutObjectPart("bucket", "key", uploadID, i, int64(len(data)), bytes.NewBuffer(data), expectedETaghex, "")
+		calcPartInfo, err = obj.PutObjectPart("bucket", "key", uploadID, i, int64(len(data)), bytes.NewBuffer(data), expectedETaghex, "", nil)
 		if err != nil {
 			c.Errorf("%s: <ERROR> %s", instanceType, err)
 		}
@@ -157,7 +157,7 @@ func testMultipartObjectAbort(obj ObjectLayer, instanceType string, c TestErrHan
 
 		metadata["md5"] = expectedETaghex
 		var calcPartInfo PartInfo
-		calcPartInfo, err = obj.PutObjectPart("bucket", "key", uploadID, i, int64(len(randomString)), bytes.NewBufferString(randomString), expectedETaghex, "")
+		calcPartInfo, err = obj.PutObjectPart("bucket", "key", uploadID, i, int64(len(randomString)), bytes.NewBufferString(randomString), expectedETaghex, "", nil)
 		if err != nil {
 			c.Fatalf("%s: <ERROR> %s", instanceType, err)
 		}
