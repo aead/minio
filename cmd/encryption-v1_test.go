@@ -158,15 +158,13 @@ func TestParseSSECustomerRequest(t *testing.T) {
 		for k, v := range test.headers {
 			headers.Set(k, v)
 		}
-		request := &http.Request{}
-		request.Header = headers
 		globalIsSSL = test.useTLS
 
-		_, err := ParseSSECustomerRequest(request)
+		_, err := ParseSSECustomerHeaders(headers)
 		if err != test.err {
 			t.Errorf("Test %d: Parse returned: %v want: %v", i, err, test.err)
 		}
-		key := request.Header.Get(SSECustomerKey)
+		key := headers.Get(SSECustomerKey)
 		if (err == nil || err == errSSEKeyMD5Mismatch) && key != "" {
 			t.Errorf("Test %d: Client key survived parsing - found key: %v", i, key)
 		}
@@ -260,15 +258,13 @@ func TestParseSSECopyCustomerRequest(t *testing.T) {
 		for k, v := range test.headers {
 			headers.Set(k, v)
 		}
-		request := &http.Request{}
-		request.Header = headers
 		globalIsSSL = test.useTLS
 
-		_, err := ParseSSECopyCustomerRequest(request)
+		_, err := ParseSSECopyCustomerHeaders(headers)
 		if err != test.err {
 			t.Errorf("Test %d: Parse returned: %v want: %v", i, err, test.err)
 		}
-		key := request.Header.Get(SSECopyCustomerKey)
+		key := headers.Get(SSECopyCustomerKey)
 		if (err == nil || err == errSSEKeyMD5Mismatch) && key != "" {
 			t.Errorf("Test %d: Client key survived parsing - found key: %v", i, key)
 		}
@@ -278,13 +274,13 @@ func TestParseSSECopyCustomerRequest(t *testing.T) {
 var encryptedSizeTests = []struct {
 	size, encsize int64
 }{
-	{size: 0, encsize: 0},                                                                   // 0
-	{size: 1, encsize: 33},                                                                  // 1
-	{size: 1024, encsize: 1024 + 32},                                                        // 2
-	{size: 2 * sseDAREPackageBlockSize, encsize: 2 * (sseDAREPackageBlockSize + 32)},        // 3
-	{size: 100*sseDAREPackageBlockSize + 1, encsize: 100*(sseDAREPackageBlockSize+32) + 33}, // 4
-	{size: sseDAREPackageBlockSize + 1, encsize: (sseDAREPackageBlockSize + 32) + 33},       // 5
-	{size: 5 * 1024 * 1024 * 1024, encsize: 81920 * (sseDAREPackageBlockSize + 32)},         // 6
+	{size: 0, encsize: 0},                                                   // 0
+	{size: 1, encsize: 33},                                                  // 1
+	{size: 1024, encsize: 1024 + 32},                                        // 2
+	{size: 2 * DAREPayloadSize, encsize: 2 * (DAREPayloadSize + 32)},        // 3
+	{size: 100*DAREPayloadSize + 1, encsize: 100*(DAREPayloadSize+32) + 33}, // 4
+	{size: DAREPayloadSize + 1, encsize: (DAREPayloadSize + 32) + 33},       // 5
+	{size: 5 * 1024 * 1024 * 1024, encsize: 81920 * (DAREPayloadSize + 32)}, // 6
 }
 
 func TestEncryptedSize(t *testing.T) {
@@ -300,15 +296,15 @@ var decryptSSECustomerObjectInfoTests = []struct {
 	encsize, size int64
 	err           error
 }{
-	{encsize: 0, size: 0, err: nil},                                                                   // 0
-	{encsize: 33, size: 1, err: nil},                                                                  // 1
-	{encsize: 1024 + 32, size: 1024, err: nil},                                                        // 2
-	{encsize: 2 * (sseDAREPackageBlockSize + 32), size: 2 * sseDAREPackageBlockSize, err: nil},        // 3
-	{encsize: 100*(sseDAREPackageBlockSize+32) + 33, size: 100*sseDAREPackageBlockSize + 1, err: nil}, // 4
-	{encsize: (sseDAREPackageBlockSize + 32) + 33, size: sseDAREPackageBlockSize + 1, err: nil},       // 5
-	{encsize: 81920 * (sseDAREPackageBlockSize + 32), size: 5 * 1024 * 1024 * 1024, err: nil},         // 6
-	{encsize: 0, size: 0, err: nil},                                                                   // 7
-	{encsize: sseDAREPackageBlockSize + 32 + 31, size: 0, err: errObjectTampered},                     // 8
+	{encsize: 0, size: 0, err: nil},                                                   // 0
+	{encsize: 33, size: 1, err: nil},                                                  // 1
+	{encsize: 1024 + 32, size: 1024, err: nil},                                        // 2
+	{encsize: 2 * (DAREPayloadSize + 32), size: 2 * DAREPayloadSize, err: nil},        // 3
+	{encsize: 100*(DAREPayloadSize+32) + 33, size: 100*DAREPayloadSize + 1, err: nil}, // 4
+	{encsize: (DAREPayloadSize + 32) + 33, size: DAREPayloadSize + 1, err: nil},       // 5
+	{encsize: 81920 * (DAREPayloadSize + 32), size: 5 * 1024 * 1024 * 1024, err: nil}, // 6
+	{encsize: 0, size: 0, err: nil},                                                   // 7
+	{encsize: DAREPayloadSize + 32 + 31, size: 0, err: errObjectTampered},             // 8
 }
 
 func TestDecryptedSize(t *testing.T) {

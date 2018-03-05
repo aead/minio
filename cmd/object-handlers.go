@@ -400,7 +400,7 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 		sseCopyC := hasSSECopyCustomerHeader(r.Header)
 		sseC := hasSSECustomerHeader(r.Header)
 		if sseC {
-			newKey, err = ParseSSECustomerRequest(r)
+			newKey, err = ParseSSECustomerHeaders(r.Header)
 			if err != nil {
 				pipeReader.CloseWithError(err)
 				writeErrorResponse(w, toAPIErrorCode(err), r.URL)
@@ -412,7 +412,7 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 		// otherwise we proceed to encrypt/decrypt.
 		if sseCopyC && sseC && cpSrcDstSame {
 			// Get the old key which needs to be rotated.
-			oldKey, err = ParseSSECopyCustomerRequest(r)
+			oldKey, err = ParseSSECopyCustomerHeaders(r.Header)
 			if err != nil {
 				pipeWriter.CloseWithError(err)
 				writeErrorResponse(w, toAPIErrorCode(err), r.URL)
@@ -749,7 +749,7 @@ func (api objectAPIHandlers) NewMultipartUploadHandler(w http.ResponseWriter, r 
 
 	if objectAPI.IsEncryptionSupported() {
 		if hasSSECustomerHeader(r.Header) {
-			key, err := ParseSSECustomerRequest(r)
+			key, err := ParseSSECustomerHeaders(r.Header)
 			if err != nil {
 				writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 				return
@@ -921,7 +921,7 @@ func (api objectAPIHandlers) CopyObjectPartHandler(w http.ResponseWriter, r *htt
 				return
 			}
 			var key []byte
-			key, err = ParseSSECustomerRequest(r)
+			key, err = ParseSSECustomerHeaders(r.Header)
 			if err != nil {
 				pipeWriter.CloseWithError(err)
 				writeErrorResponse(w, toAPIErrorCode(err), r.URL)
@@ -1110,7 +1110,7 @@ func (api objectAPIHandlers) PutObjectPartHandler(w http.ResponseWriter, r *http
 				return
 			}
 			var key []byte
-			key, err = ParseSSECustomerRequest(r)
+			key, err = ParseSSECustomerHeaders(r.Header)
 			if err != nil {
 				writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 				return
