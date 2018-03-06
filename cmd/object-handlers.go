@@ -421,7 +421,7 @@ func (api objectAPIHandlers) CopyObjectHandler(w http.ResponseWriter, r *http.Re
 			for k, v := range srcInfo.UserDefined {
 				encMetadata[k] = v
 			}
-			if err = rotateKey(oldKey, newKey, encMetadata); err != nil {
+			if err = RotateKeys(oldKey, newKey, encMetadata); err != nil {
 				pipeWriter.CloseWithError(err)
 				writeErrorResponse(w, toAPIErrorCode(err), r.URL)
 				return
