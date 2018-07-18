@@ -27,8 +27,8 @@ import (
 	"time"
 
 	etcd "github.com/coreos/etcd/clientv3"
-
 	"github.com/minio/cli"
+	"github.com/minio/minio/cmd/crypto"
 	"github.com/minio/minio/cmd/logger"
 	"github.com/minio/minio/pkg/auth"
 	"github.com/minio/minio/pkg/dns"
@@ -278,5 +278,19 @@ func handleCommonEnvVars() {
 		// if worm is turned off or on.
 		globalIsEnvWORM = true
 		globalWORMEnabled = bool(wormFlag)
+	}
+
+	kmsConf, err := crypto.NewVaultConfig()
+	if err != nil {
+		logger.Fatal(err, "Unable to initialize hashicorp vault")
+	}
+	if kmsConf.Vault.Endpoint != "" {
+		kms, err := crypto.NewVault(kmsConf)
+		if err != nil {
+			logger.Fatal(err, "Unable to initialize KMS")
+		}
+		globalKMS = kms
+		globalKMSKeyID = kmsConf.Vault.Key.Name
+		globalKMSConfig = kmsConf
 	}
 }

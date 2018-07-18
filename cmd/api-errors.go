@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/minio/minio/cmd/crypto"
 	"github.com/minio/minio/pkg/auth"
 	"github.com/minio/minio/pkg/dns"
 	"github.com/minio/minio/pkg/event"
@@ -140,6 +141,10 @@ const (
 	ErrMissingSSECustomerKeyMD5
 	ErrSSECustomerKeyMD5Mismatch
 	ErrInvalidSSECustomerParameters
+	ErrIncompatibleEncryptionMethod
+	ErrKMSNotConfigured
+	ErrKMSAuthFailure
+	ErrKMSInternalException
 
 	// Bucket notification related errors.
 	ErrEventNotification
@@ -679,6 +684,26 @@ var errorCodeResponse = map[APIErrorCode]APIError{
 		Description:    "The provided encryption parameters did not match the ones used originally.",
 		HTTPStatusCode: http.StatusBadRequest,
 	},
+	ErrIncompatibleEncryptionMethod: {
+		Code:           "InvalidArgument",
+		Description:    "Server side encryption specified with both SSE-C and SSE-S3 headers",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	ErrKMSNotConfigured: {
+		Code:           "InvalidArgument",
+		Description:    "Server side encryption specified but KMS is not configured",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	ErrKMSInternalException: {
+		Code:           "InvalidArgument",
+		Description:    "Server side encryption specified but KMS has an internal exception",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
+	ErrKMSAuthFailure: {
+		Code:           "InvalidArgument",
+		Description:    "Server side encryption specified but KMS authorization failed",
+		HTTPStatusCode: http.StatusBadRequest,
+	},
 
 	/// S3 extensions.
 	ErrContentSHA256Mismatch: {
@@ -868,15 +893,15 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 	// SSE errors
 	case errInsecureSSERequest:
 		apiErr = ErrInsecureSSECustomerRequest
-	case errInvalidSSEAlgorithm:
+	case crypto.ErrInvalidCustomerAlgorithm:
 		apiErr = ErrInvalidSSECustomerAlgorithm
-	case errInvalidSSEKey:
+	case crypto.ErrInvalidCustomerKey:
 		apiErr = ErrInvalidSSECustomerKey
-	case errMissingSSEKey:
+	case crypto.ErrMissingCustomerKey:
 		apiErr = ErrMissingSSECustomerKey
-	case errMissingSSEKeyMD5:
+	case crypto.ErrMissingCustomerKeyMD5:
 		apiErr = ErrMissingSSECustomerKeyMD5
-	case errSSEKeyMD5Mismatch:
+	case crypto.ErrCustomerKeyMD5Mismatch:
 		apiErr = ErrSSECustomerKeyMD5Mismatch
 	case errObjectTampered:
 		apiErr = ErrObjectTampered
@@ -884,8 +909,16 @@ func toAPIErrorCode(err error) (apiErr APIErrorCode) {
 		apiErr = ErrSSEEncryptedObject
 	case errInvalidSSEParameters:
 		apiErr = ErrInvalidSSECustomerParameters
-	case errSSEKeyMismatch:
+	case crypto.ErrInvalidCustomerKey:
 		apiErr = ErrAccessDenied // no access without correct key
+	case crypto.ErrIncompatibleEncryptionMethod:
+		apiErr = ErrIncompatibleEncryptionMethod
+	case errKMSNotConfigured:
+		apiErr = ErrKMSNotConfigured
+	case crypto.ErrKMSAuthLogin:
+		apiErr = ErrKMSAuthFailure
+	case crypto.ErrKMSInternalException:
+		apiErr = ErrKMSInternalException
 	case context.Canceled, context.DeadlineExceeded:
 		apiErr = ErrOperationTimedOut
 	}
