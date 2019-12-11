@@ -191,11 +191,13 @@ const (
 	EnvKMSKeysKeyName = "MINIO_KMS_KEYS_KEY_NAME"
 )
 
-var defaultCfg = VaultConfig{
+var defaultVaultCfg = VaultConfig{
 	Auth: VaultAuth{
 		Type: "approle",
 	},
 }
+
+var defaultKeysCfg = KeysConfig{}
 
 // EnabledVault returns true if HashiCorp Vault is enabled.
 func EnabledVault(kvs config.KVS) bool {
@@ -209,7 +211,78 @@ func EnabledKeys(kvs config.KVS) bool {
 	return endpoint != ""
 }
 
-// LookupConfig extracts the KMS configuration provided by environment
+// LookupKeysConfig lookup keys server configuration.
+func LookupKeysConfig(kvs config.KVS) (KeysConfig, error) {
+	keysCfg := KeysConfig{}
+
+	endpointStr := env.Get(EnvKMSKeysEndpoint, kvs.Get(KMSKeysEndpoint))
+	if endpointStr != "" {
+		// Lookup Keys configuration & overwrite config entry if ENV var is present
+		endpoint, err := xnet.ParseHTTPURL(endpointStr)
+		if err != nil {
+			return keysCfg, err
+		}
+		endpointStr = endpoint.String()
+	}
+
+	keysCfg.Endpoint = endpointStr
+	keysCfg.KeyFile = env.Get(EnvKMSKeysKeyFile, kvs.Get(KMSKeysKeyFile))
+	keysCfg.CertFile = env.Get(EnvKMSKesCertFile, kvs.Get(KMSKeysCertFile))
+	keysCfg.CAPath = env.Get(EnvKMSKeysCAPath, kvs.Get(KMSKeysCAPath))
+	keysCfg.DefaultKeyID = env.Get(EnvKMSKeysKeyName, kvs.Get(KMSKeysKeyName))
+
+	if reflect.DeepEqual(keysCfg, defaultKeysCfg) {
+		return keysCfg, nil
+	}
+
+	// Verify all the proper settings.
+	if err := keysCfg.Verify(); err != nil {
+		return keysCfg, err
+	}
+
+	keysCfg.Enabled = true
+
+	return keysCfg, nil
+}
+
+func lookupAutoEncryption() (bool, error) {
+	autoBool, err := config.ParseBool(env.Get(EnvAutoEncryptionLegacy, config.EnableOff))
+	if err != nil {
+		return false, err
+	}
+	if !autoBool {
+		autoBool, err = config.ParseBool(env.Get(EnvKMSAutoEncryption, config.EnableOff))
+		if err != nil {
+			return false, err
+		}
+	}
+	return autoBool, nil
+}
+
+// LookupConfig lookup vault or keys config, returns KMSConfig
+// to configure KMS object for object encryption
+func LookupConfig(c config.Config) (KMSConfig, error) {
+	vcfg, err := LookupVaultConfig(c[config.KmsVaultSubSys][config.Default])
+	if err != nil {
+		return KMSConfig{}, err
+	}
+	keysCfg, err := LookupKeysConfig(c[config.KmsKeysSubSys][config.Default])
+	if err != nil {
+		return KMSConfig{}, err
+	}
+	autoEncrypt, err := lookupAutoEncryption()
+	if err != nil {
+		return KMSConfig{}, err
+	}
+	kmsCfg := KMSConfig{
+		AutoEncryption: autoEncrypt,
+		Vault:          vcfg,
+		Keys:           keysCfg,
+	}
+	return kmsCfg, nil
+}
+
+// LookupVaultConfig extracts the KMS configuration provided by environment
 // variables and merge them with the provided KMS configuration. The
 // merging follows the following rules:
 //
@@ -222,36 +295,21 @@ func EnabledKeys(kvs config.KVS) bool {
 //
 // It sets the global KMS configuration according to the merged configuration
 // on succes.
-func LookupConfig(kvs config.KVS) (KMSConfig, error) {
-	defaultKVS := config.KVS{}
-	defaultKVS = append(defaultKVS, DefaultVaultKVS...)
-	defaultKVS = append(defaultKVS, DefaultKeysKVS...)
-
-	if err := config.CheckValidKeys(config.KmsVaultSubSys, kvs, defaultKVS); err != nil {
-		return KMSConfig{}, err
+func LookupVaultConfig(kvs config.KVS) (VaultConfig, error) {
+	if err := config.CheckValidKeys(config.KmsVaultSubSys, kvs, DefaultVaultKVS); err != nil {
+		return VaultConfig{}, err
 	}
 
-	if err := config.CheckValidKeys(config.KmsKeysSubSys, kvs, defaultKVS); err != nil {
-		return KMSConfig{}, err
-	}
-
-	kmsCfg, err := lookupConfigLegacy(kvs)
+	vcfg, err := lookupConfigLegacy(kvs)
 	if err != nil {
-		return kmsCfg, err
+		return vcfg, err
 	}
 
-	if !kmsCfg.AutoEncryption {
-		kmsCfg.AutoEncryption, err = config.ParseBool(env.Get(EnvKMSAutoEncryption, config.EnableOff))
-		if err != nil {
-			return kmsCfg, err
-		}
+	if vcfg.Enabled {
+		return vcfg, nil
 	}
 
-	if kmsCfg.Vault.Enabled {
-		return kmsCfg, nil
-	}
-
-	vcfg := VaultConfig{
+	vcfg = VaultConfig{
 		Auth: VaultAuth{
 			Type: "approle",
 		},
@@ -262,7 +320,7 @@ func LookupConfig(kvs config.KVS) (KMSConfig, error) {
 		// Lookup Hashicorp-Vault configuration & overwrite config entry if ENV var is present
 		endpoint, err := xnet.ParseHTTPURL(endpointStr)
 		if err != nil {
-			return kmsCfg, err
+			return vcfg, err
 		}
 		endpointStr = endpoint.String()
 	}
@@ -281,38 +339,21 @@ func LookupConfig(kvs config.KVS) (KMSConfig, error) {
 	if keyVersion := env.Get(EnvKMSVaultKeyVersion, kvs.Get(KMSVaultKeyVersion)); keyVersion != "" {
 		vcfg.Key.Version, err = strconv.Atoi(keyVersion)
 		if err != nil {
-			return kmsCfg, fmt.Errorf("Unable to parse VaultKeyVersion value (`%s`)", keyVersion)
+			return vcfg, fmt.Errorf("Unable to parse VaultKeyVersion value (`%s`)", keyVersion)
 		}
 	}
 
-	endpointStr = env.Get(EnvKMSKeysEndpoint, kvs.Get(KMSKeysEndpoint))
-	if endpointStr != "" {
-		// Lookup Hashicorp-Vault configuration & overwrite config entry if ENV var is present
-		endpoint, err := xnet.ParseHTTPURL(endpointStr)
-		if err != nil {
-			return kmsCfg, err
-		}
-		endpointStr = endpoint.String()
-	}
-	kmsCfg.Keys.Endpoint = endpointStr
-	kmsCfg.Keys.KeyFile = env.Get(EnvKMSKeysKeyFile, kvs.Get(KMSKeysKeyFile))
-	kmsCfg.Keys.CertFile = env.Get(EnvKMSKesCertFile, kvs.Get(KMSKeysCertFile))
-	kmsCfg.Keys.CAPath = env.Get(EnvKMSKeysCAPath, kvs.Get(KMSKeysCAPath))
-	kmsCfg.Keys.DefaultKeyID = env.Get(EnvKMSKeysKeyName, kvs.Get(KMSKeysKeyName))
-	kmsCfg.Keys.Enabled = kmsCfg.Keys.Endpoint != ""
-
-	if reflect.DeepEqual(vcfg, defaultCfg) {
-		return kmsCfg, nil
+	if reflect.DeepEqual(vcfg, defaultVaultCfg) {
+		return vcfg, nil
 	}
 
 	// Verify all the proper settings.
 	if err = vcfg.Verify(); err != nil {
-		return kmsCfg, err
+		return vcfg, err
 	}
 
 	vcfg.Enabled = true
-	kmsCfg.Vault = vcfg
-	return kmsCfg, nil
+	return vcfg, nil
 }
 
 // NewKMS - initialize a new KMS.

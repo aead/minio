@@ -17,14 +17,10 @@ package crypto
 import (
 	"bytes"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 
 	key "github.com/minio/keys"
+	"github.com/minio/minio/cmd/config"
 )
 
 // KeysConfig contains the configuration required
@@ -65,6 +61,22 @@ type KeysConfig struct {
 	DefaultKeyID string
 }
 
+// Verify verifies if the keys configuration is correct
+func (k KeysConfig) Verify() (err error) {
+	switch {
+	case k.Endpoint == "":
+		err = errors.New("crypto: missing keys endpoint")
+	case k.CertFile == "":
+		err = errors.New("crypto: missing cert file")
+	case k.KeyFile == "":
+		err = errors.New("crypto: missing key file")
+	case k.DefaultKeyID == "":
+		err = errors.New("crypto: missing default key id")
+	}
+
+	return err
+}
+
 type keyService struct {
 	client       *key.Client
 	defaultKeyID string
@@ -76,21 +88,21 @@ type keyService struct {
 //
 // The defaultKeyID is the key ID returned when calling
 // KMS.KeyID().
-func NewKeys(config KeysConfig) (KMS, error) {
-	cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
+func NewKeys(kconfig KeysConfig) (KMS, error) {
+	cert, err := tls.LoadX509KeyPair(kconfig.CertFile, kconfig.KeyFile)
 	if err != nil {
 		return nil, err
 	}
-	certPool, err := loadCACertificates(config.CAPath)
+	certPool, err := config.GetRootCAs(kconfig.CAPath)
 	if err != nil {
 		return nil, err
 	}
 	return &keyService{
-		client: key.NewClient(config.Endpoint, &tls.Config{
+		client: key.NewClient(kconfig.Endpoint, &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			RootCAs:      certPool,
 		}),
-		defaultKeyID: config.DefaultKeyID,
+		defaultKeyID: kconfig.DefaultKeyID,
 	}, nil
 }
 
@@ -153,48 +165,4 @@ func (keys *keyService) UpdateKey(keyID string, sealedKey []byte, ctx Context) (
 	// Currently a keys server does not support key rotation (of the same key)
 	// Therefore, we simply return the same sealedKey.
 	return sealedKey, nil
-}
-
-func loadCACertificates(path string) (*x509.CertPool, error) {
-	rootCAs, _ := x509.SystemCertPool()
-	if rootCAs == nil {
-		// In some systems (like Windows) system cert pool is
-		// not supported or no certificates are present on the
-		// system - so we create a new cert pool.
-		rootCAs = x509.NewCertPool()
-	}
-	if path == "" { // if no path is provided, return early.
-		return rootCAs, nil
-	}
-
-	stat, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-	if !stat.IsDir() { // Read and parse the file and add the certificate
-		cert, err := ioutil.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		if !rootCAs.AppendCertsFromPEM(cert) {
-			return nil, fmt.Errorf("%s does not contain a valid certificate", path)
-		}
-		return rootCAs, nil
-	}
-
-	// For all files in the directory, parse the file and add
-	// the certificate to the cert pool. If one file is no
-	// readable or does not contain a valid certificate, ignore it.
-	files, err := ioutil.ReadDir(path)
-	if err != nil {
-		return nil, err
-	}
-	for _, file := range files {
-		cert, err := ioutil.ReadFile(filepath.Join(path, file.Name()))
-		if err != nil {
-			continue // ignore files which are not readable.
-		}
-		rootCAs.AppendCertsFromPEM(cert)
-	}
-	return rootCAs, nil
 }

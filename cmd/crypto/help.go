@@ -96,6 +96,7 @@ var (
 		config.HelpKV{
 			Key:         KMSKeysCAPath,
 			Description: `keys CAs path e.g. /etc/keys/CAs`,
+			Optional:    true,
 			Type:        "string",
 		},
 		config.HelpKV{
