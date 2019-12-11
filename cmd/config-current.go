@@ -50,7 +50,8 @@ func initHelp() {
 		config.PolicyOPASubSys:      opa.DefaultKVS,
 		config.RegionSubSys:         config.DefaultRegionKVS,
 		config.CredentialsSubSys:    config.DefaultCredentialKVS,
-		config.KmsVaultSubSys:       crypto.DefaultKVS,
+		config.KmsVaultSubSys:       crypto.DefaultVaultKVS,
+		config.KmsKeysSubSys:        crypto.DefaultKeysKVS,
 		config.LoggerWebhookSubSys:  logger.DefaultKVS,
 		config.AuditWebhookSubSys:   logger.DefaultAuditKVS,
 	}
@@ -95,6 +96,10 @@ func initHelp() {
 		config.HelpKV{
 			Key:         config.KmsVaultSubSys,
 			Description: "enable external HashiCorp Vault key management service",
+		},
+		config.HelpKV{
+			Key:         config.KmsKeysSubSys,
+			Description: "enable external MinIO keys cache service",
 		},
 		config.HelpKV{
 			Key:             config.LoggerWebhookSubSys,
@@ -177,7 +182,8 @@ func initHelp() {
 		config.IdentityOpenIDSubSys: openid.Help,
 		config.IdentityLDAPSubSys:   xldap.Help,
 		config.PolicyOPASubSys:      opa.Help,
-		config.KmsVaultSubSys:       crypto.Help,
+		config.KmsVaultSubSys:       crypto.HelpVault,
+		config.KmsKeysSubSys:        crypto.HelpKeys,
 		config.LoggerWebhookSubSys:  logger.Help,
 		config.AuditWebhookSubSys:   logger.HelpAudit,
 		config.NotifyAMQPSubSys:     notify.HelpAMQP,
@@ -371,10 +377,12 @@ func lookupConfigs(s config.Config) (err error) {
 	if err != nil {
 		return fmt.Errorf("Unable to setup KMS config: %w", err)
 	}
+
 	keysCfg, err := crypto.LookupConfig(s[config.KmsKeysSubSys][config.Default])
 	if err != nil {
 		return fmt.Errorf("Unable to setup KMS config: %w", err)
 	}
+
 	kmsCfg := crypto.KMSConfig{
 		AutoEncryption: vaultCfg.AutoEncryption || keysCfg.AutoEncryption,
 		Vault:          vaultCfg.Vault,

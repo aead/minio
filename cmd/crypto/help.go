@@ -20,7 +20,7 @@ import "github.com/minio/minio/cmd/config"
 
 // Help template for KMS vault
 var (
-	Help = config.HelpKVS{
+	HelpVault = config.HelpKVS{
 		config.HelpKV{
 			Key:         KMSVaultEndpoint,
 			Description: `API endpoint e.g. "http://vault-endpoint-ip:8200"`,
@@ -63,6 +63,40 @@ var (
 			Description: `optional path to PEM-encoded CA certs e.g. "/home/user/custom-certs"`,
 			Optional:    true,
 			Type:        "path",
+		},
+		config.HelpKV{
+			Key:         config.Comment,
+			Description: config.DefaultComment,
+			Optional:    true,
+			Type:        "sentence",
+		},
+	}
+
+	HelpKeys = config.HelpKVS{
+		config.HelpKV{
+			Key:         KMSKeysEndpoint,
+			Description: `API endpoint e.g. "http://keys-endpoint:8200"`,
+			Type:        "url",
+		},
+		config.HelpKV{
+			Key:         KMSKeysKeyName,
+			Description: `unique keys key name e.g. "my-minio-key"`,
+			Type:        "string",
+		},
+		config.HelpKV{
+			Key:         KMSKeysCertFile,
+			Description: `keys cert file e.g. /etc/keys/public.crt`,
+			Type:        "string",
+		},
+		config.HelpKV{
+			Key:         KMSKeysKeyFile,
+			Description: `keys private key e.g. /etc/keys/private.key`,
+			Type:        "string",
+		},
+		config.HelpKV{
+			Key:         KMSKeysCAPath,
+			Description: `keys CAs path e.g. /etc/keys/CAs`,
+			Type:        "string",
 		},
 		config.HelpKV{
 			Key:         config.Comment,

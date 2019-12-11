@@ -44,6 +44,7 @@ const (
 	KMSVaultAppRoleSecret = "auth_approle_secret"
 )
 
+// KMS keys constants.
 const (
 	KMSKeysEndpoint = "endpoint"
 	KMSKeysKeyFile  = "key_file"
@@ -54,7 +55,7 @@ const (
 
 // DefaultKVS - default KV crypto config
 var (
-	DefaultKVS = config.KVS{
+	DefaultVaultKVS = config.KVS{
 		config.KV{
 			Key:   KMSVaultEndpoint,
 			Value: "",
@@ -87,13 +88,15 @@ var (
 			Key:   KMSVaultNamespace,
 			Value: "",
 		},
+	}
 
+	DefaultKeysKVS = config.KVS{
 		config.KV{
 			Key:   KMSKeysEndpoint,
 			Value: "",
 		},
 		config.KV{
-			Key:   KMSKeysKeyFile,
+			Key:   KMSKeysKeyName,
 			Value: "",
 		},
 		config.KV{
@@ -101,11 +104,11 @@ var (
 			Value: "",
 		},
 		config.KV{
-			Key:   KMSKeysCAPath,
+			Key:   KMSKeysKeyFile,
 			Value: "",
 		},
 		config.KV{
-			Key:   KMSKeysKeyName,
+			Key:   KMSKeysCAPath,
 			Value: "",
 		},
 	}
@@ -194,13 +197,13 @@ var defaultCfg = VaultConfig{
 	},
 }
 
-// Enabled returns true if HashiCorp Vault is enabled.
+// EnabledVault returns true if HashiCorp Vault is enabled.
 func EnabledVault(kvs config.KVS) bool {
 	endpoint := kvs.Get(KMSVaultEndpoint)
 	return endpoint != ""
 }
 
-// Enabled returns true if keys as KMS is enabled.
+// EnabledKeys returns true if keys as KMS is enabled.
 func EnabledKeys(kvs config.KVS) bool {
 	endpoint := kvs.Get(KMSKeysEndpoint)
 	return endpoint != ""
@@ -220,10 +223,15 @@ func EnabledKeys(kvs config.KVS) bool {
 // It sets the global KMS configuration according to the merged configuration
 // on succes.
 func LookupConfig(kvs config.KVS) (KMSConfig, error) {
-	if err := config.CheckValidKeys(config.KmsVaultSubSys, kvs, DefaultKVS); err != nil {
+	defaultKVS := config.KVS{}
+	defaultKVS = append(defaultKVS, DefaultVaultKVS...)
+	defaultKVS = append(defaultKVS, DefaultKeysKVS...)
+
+	if err := config.CheckValidKeys(config.KmsVaultSubSys, kvs, defaultKVS); err != nil {
 		return KMSConfig{}, err
 	}
-	if err := config.CheckValidKeys(config.KmsKeysSubSys, kvs, DefaultKVS); err != nil {
+
+	if err := config.CheckValidKeys(config.KmsKeysSubSys, kvs, defaultKVS); err != nil {
 		return KMSConfig{}, err
 	}
 
@@ -231,12 +239,14 @@ func LookupConfig(kvs config.KVS) (KMSConfig, error) {
 	if err != nil {
 		return kmsCfg, err
 	}
+
 	if !kmsCfg.AutoEncryption {
 		kmsCfg.AutoEncryption, err = config.ParseBool(env.Get(EnvKMSAutoEncryption, config.EnableOff))
 		if err != nil {
 			return kmsCfg, err
 		}
 	}
+
 	if kmsCfg.Vault.Enabled {
 		return kmsCfg, nil
 	}
@@ -246,6 +256,7 @@ func LookupConfig(kvs config.KVS) (KMSConfig, error) {
 			Type: "approle",
 		},
 	}
+
 	endpointStr := env.Get(EnvKMSVaultEndpoint, kvs.Get(KMSVaultEndpoint))
 	if endpointStr != "" {
 		// Lookup Hashicorp-Vault configuration & overwrite config entry if ENV var is present
@@ -255,12 +266,14 @@ func LookupConfig(kvs config.KVS) (KMSConfig, error) {
 		}
 		endpointStr = endpoint.String()
 	}
+
 	vcfg.Endpoint = endpointStr
 	vcfg.CAPath = env.Get(EnvKMSVaultCAPath, kvs.Get(KMSVaultCAPath))
 	vcfg.Auth.Type = env.Get(EnvKMSVaultAuthType, kvs.Get(KMSVaultAuthType))
 	if vcfg.Auth.Type == "" {
 		vcfg.Auth.Type = "approle"
 	}
+
 	vcfg.Auth.AppRole.ID = env.Get(EnvKMSVaultAppRoleID, kvs.Get(KMSVaultAppRoleID))
 	vcfg.Auth.AppRole.Secret = env.Get(EnvKMSVaultAppSecretID, kvs.Get(KMSVaultAppRoleSecret))
 	vcfg.Key.Name = env.Get(EnvKMSVaultKeyName, kvs.Get(KMSVaultKeyName))
