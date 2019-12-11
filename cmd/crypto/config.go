@@ -29,6 +29,7 @@ import (
 type KMSConfig struct {
 	AutoEncryption bool        `json:"-"`
 	Vault          VaultConfig `json:"vault"`
+	Keys           KeysConfig  `json:"keys"`
 }
 
 // KMS Vault constants.
@@ -41,6 +42,14 @@ const (
 	KMSVaultAuthType      = "auth_type"
 	KMSVaultAppRoleID     = "auth_approle_id"
 	KMSVaultAppRoleSecret = "auth_approle_secret"
+)
+
+const (
+	KMSKeysEndpoint = "endpoint"
+	KMSKeysKeyFile  = "key_file"
+	KMSKeysCertFile = "cert_file"
+	KMSKeysCAPath   = "capath"
+	KMSKeysKeyName  = "key_name"
 )
 
 // DefaultKVS - default KV crypto config
@@ -76,6 +85,27 @@ var (
 		},
 		config.KV{
 			Key:   KMSVaultNamespace,
+			Value: "",
+		},
+
+		config.KV{
+			Key:   KMSKeysEndpoint,
+			Value: "",
+		},
+		config.KV{
+			Key:   KMSKeysKeyFile,
+			Value: "",
+		},
+		config.KV{
+			Key:   KMSKeysCertFile,
+			Value: "",
+		},
+		config.KV{
+			Key:   KMSKeysCAPath,
+			Value: "",
+		},
+		config.KV{
+			Key:   KMSKeysKeyName,
 			Value: "",
 		},
 	}
@@ -132,15 +162,47 @@ const (
 	EnvKMSVaultNamespace = "MINIO_KMS_VAULT_NAMESPACE"
 )
 
+const (
+	// EnvKMSKeysEndpoint is the environment variable used to specify
+	// the keys server HTTPS endpoint.
+	EnvKMSKeysEndpoint = "MINIO_KMS_KEYS_ENDPOINT"
+
+	// EnvKMSKeysKeyFile is the environment variable used to specify
+	// the TLS private key used by MinIO to authenticate to the keys
+	// server HTTPS via mTLS.
+	EnvKMSKeysKeyFile = "MINIO_KMS_KEYS_KEY_FILE"
+
+	// EnvKMSKesCertFile is the environment variable used to specify
+	// the TLS certificate used by MinIO to authenticate to the keys
+	// server HTTPS via mTLS.
+	EnvKMSKesCertFile = "MINIO_KMS_KEYS_CERT_FILE"
+
+	// EnvKMSKeysCAPath is the environment variable used to specify
+	// the TLS root certificates used by MinIO to verify the certificate
+	// presented by to the keys server when establishing a TLS connection.
+	EnvKMSKeysCAPath = "MINIO_KMS_KEYS_CA_PATH"
+
+	// EnvKMSKeysKeyName is the environment variable used to specify
+	// the (default) key at the keys server. In the S3 context it's
+	// referred as customer master key ID (CMK-ID).
+	EnvKMSKeysKeyName = "MINIO_KMS_KEYS_KEY_NAME"
+)
+
 var defaultCfg = VaultConfig{
 	Auth: VaultAuth{
 		Type: "approle",
 	},
 }
 
-// Enabled returns if HashiCorp Vault is enabled.
-func Enabled(kvs config.KVS) bool {
+// Enabled returns true if HashiCorp Vault is enabled.
+func EnabledVault(kvs config.KVS) bool {
 	endpoint := kvs.Get(KMSVaultEndpoint)
+	return endpoint != ""
+}
+
+// Enabled returns true if keys as KMS is enabled.
+func EnabledKeys(kvs config.KVS) bool {
+	endpoint := kvs.Get(KMSKeysEndpoint)
 	return endpoint != ""
 }
 
@@ -161,6 +223,10 @@ func LookupConfig(kvs config.KVS) (KMSConfig, error) {
 	if err := config.CheckValidKeys(config.KmsVaultSubSys, kvs, DefaultKVS); err != nil {
 		return KMSConfig{}, err
 	}
+	if err := config.CheckValidKeys(config.KmsKeysSubSys, kvs, DefaultKVS); err != nil {
+		return KMSConfig{}, err
+	}
+
 	kmsCfg, err := lookupConfigLegacy(kvs)
 	if err != nil {
 		return kmsCfg, err
@@ -206,6 +272,22 @@ func LookupConfig(kvs config.KVS) (KMSConfig, error) {
 		}
 	}
 
+	endpointStr = env.Get(EnvKMSKeysEndpoint, kvs.Get(KMSKeysEndpoint))
+	if endpointStr != "" {
+		// Lookup Hashicorp-Vault configuration & overwrite config entry if ENV var is present
+		endpoint, err := xnet.ParseHTTPURL(endpointStr)
+		if err != nil {
+			return kmsCfg, err
+		}
+		endpointStr = endpoint.String()
+	}
+	kmsCfg.Keys.Endpoint = endpointStr
+	kmsCfg.Keys.KeyFile = env.Get(EnvKMSKeysKeyFile, kvs.Get(KMSKeysKeyFile))
+	kmsCfg.Keys.CertFile = env.Get(EnvKMSKesCertFile, kvs.Get(KMSKeysCertFile))
+	kmsCfg.Keys.CAPath = env.Get(EnvKMSKeysCAPath, kvs.Get(KMSKeysCAPath))
+	kmsCfg.Keys.DefaultKeyID = env.Get(EnvKMSKeysKeyName, kvs.Get(KMSKeysKeyName))
+	kmsCfg.Keys.Enabled = kmsCfg.Keys.Endpoint != ""
+
 	if reflect.DeepEqual(vcfg, defaultCfg) {
 		return kmsCfg, nil
 	}
@@ -227,6 +309,9 @@ func NewKMS(cfg KMSConfig) (kms KMS, err error) {
 		if cfg.Vault.Enabled { // Vault and KMS master key provided
 			return kms, errors.New("Ambiguous KMS configuration: vault configuration and a master key are provided at the same time")
 		}
+		if cfg.Keys.Enabled {
+			return kms, errors.New("Ambiguous KMS configuration: keys configuration and a master key are provided at the same time")
+		}
 		kms, err = ParseMasterKey(masterKeyLegacy)
 		if err != nil {
 			return kms, err
@@ -235,12 +320,22 @@ func NewKMS(cfg KMSConfig) (kms KMS, err error) {
 		if cfg.Vault.Enabled { // Vault and KMS master key provided
 			return kms, errors.New("Ambiguous KMS configuration: vault configuration and a master key are provided at the same time")
 		}
+		if cfg.Keys.Enabled {
+			return kms, errors.New("Ambiguous KMS configuration: keys configuration and a master key are provided at the same time")
+		}
 		kms, err = ParseMasterKey(masterKey)
 		if err != nil {
 			return kms, err
 		}
+	} else if cfg.Vault.Enabled && cfg.Keys.Enabled {
+		return kms, errors.New("Ambiguous KMS configuration: vault configuration and keys configuration are provided at the same time")
 	} else if cfg.Vault.Enabled {
 		kms, err = NewVault(cfg.Vault)
+		if err != nil {
+			return kms, err
+		}
+	} else if cfg.Keys.Enabled {
+		kms, err = NewKeys(cfg.Keys)
 		if err != nil {
 			return kms, err
 		}

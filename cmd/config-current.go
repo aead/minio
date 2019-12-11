@@ -262,6 +262,24 @@ func validateConfig(s config.Config) error {
 			env.SetEnvOff()
 		}
 	}
+	{
+		kmsCfg, err := crypto.LookupConfig(s[config.KmsKeysSubSys][config.Default])
+		if err != nil {
+			return err
+		}
+		if kmsCfg.Keys.Enabled {
+			// Set env to enable master key validation.
+			// this is needed only for KMS.
+			env.SetEnvOn()
+
+			if _, err = crypto.NewKMS(kmsCfg); err != nil {
+				return err
+			}
+
+			// Disable merging env values for the rest.
+			env.SetEnvOff()
+		}
+	}
 
 	if _, err := openid.LookupConfig(s[config.IdentityOpenIDSubSys][config.Default],
 		NewCustomHTTPTransport(), xhttp.DrainBody); err != nil {
@@ -349,9 +367,18 @@ func lookupConfigs(s config.Config) (err error) {
 		}
 	}
 
-	kmsCfg, err := crypto.LookupConfig(s[config.KmsVaultSubSys][config.Default])
+	vaultCfg, err := crypto.LookupConfig(s[config.KmsVaultSubSys][config.Default])
 	if err != nil {
 		return fmt.Errorf("Unable to setup KMS config: %w", err)
+	}
+	keysCfg, err := crypto.LookupConfig(s[config.KmsKeysSubSys][config.Default])
+	if err != nil {
+		return fmt.Errorf("Unable to setup KMS config: %w", err)
+	}
+	kmsCfg := crypto.KMSConfig{
+		AutoEncryption: vaultCfg.AutoEncryption || keysCfg.AutoEncryption,
+		Vault:          vaultCfg.Vault,
+		Keys:           keysCfg.Keys,
 	}
 
 	GlobalKMS, err = crypto.NewKMS(kmsCfg)
