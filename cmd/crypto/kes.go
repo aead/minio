@@ -181,24 +181,6 @@ func (kes *kesService) UnsealKey(keyID string, sealedKey []byte, ctx Context) (k
 	return key, nil
 }
 
-// UpdateKey re-wraps the sealedKey if the master key referenced by the keyID
-// has been changed by the KMS operator - i.e. the master key has been rotated.
-// If the master key hasn't changed since the sealedKey has been created / updated
-// it may return the same sealedKey as rotatedKey.
-//
-// The context must be same context as the one provided while
-// generating the plaintext key / sealedKey.
-func (kes *kesService) UpdateKey(keyID string, sealedKey []byte, ctx Context) ([]byte, error) {
-	_, err := kes.UnsealKey(keyID, sealedKey, ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Currently a kes server does not support key rotation (of the same key)
-	// Therefore, we simply return the same sealedKey.
-	return sealedKey, nil
-}
-
 // kesClient implements the bare minimum functionality needed for
 // MinIO to talk to a KES server. In particular, it implements
 // GenerateDataKey (API: /v1/key/generate/) and
