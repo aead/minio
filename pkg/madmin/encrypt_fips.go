@@ -16,7 +16,18 @@
 
 package madmin
 
+import (
+	"crypto"
+
+	"golang.org/x/crypto/pbkdf2"
+)
+
 // useAES always returns true since AES is the only
 // option out of AES-GCM and ChaCha20-Poly1305 that
 // is approved by the NIST.
 func useAES() bool { return true }
+
+// generateHash generates bcrypt password hash
+func generateHash(password []byte, salt []byte) []byte {
+	return pbkdf2.Key(password, salt, 100000, 32, crypto.SHA256.New)
+}

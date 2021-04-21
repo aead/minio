@@ -16,9 +16,23 @@
 
 package madmin
 
-import "github.com/secure-io/sio-go/sioutil"
+import (
+	"github.com/minio/minio/pkg/argon2"
+	"github.com/secure-io/sio-go/sioutil"
+)
+
+var idKey func([]byte, []byte, []byte, []byte, uint32) []byte
+
+func init() {
+	idKey = argon2.NewIDKey(1, 64*1024, 4)
+}
 
 // useAES returns true if the executing CPU provides
 // AES-GCM hardware instructions and an optimized
 // assembler implementation is available.
 func useAES() bool { return sioutil.NativeAES() }
+
+// generateHash generates bcrypt password hash
+func generateHash(password []byte, salt []byte) []byte {
+	return idKey(password, salt, nil, nil, 32)
+}

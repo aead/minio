@@ -1,5 +1,5 @@
 /*
- * MinIO Cloud Storage, (C) 2018 MinIO, Inc.
+ * MinIO Cloud Storage, (C) 2018-2021 MinIO, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,16 +23,9 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/minio/minio/pkg/argon2"
 	"github.com/secure-io/sio-go"
 	"github.com/secure-io/sio-go/sioutil"
 )
-
-var idKey func([]byte, []byte, []byte, []byte, uint32) []byte
-
-func init() {
-	idKey = argon2.NewIDKey(1, 64*1024, 4)
-}
 
 // EncryptData encrypts the data with an unique key
 // derived from password using the Argon2id PBKDF.
@@ -44,7 +37,7 @@ func EncryptData(password string, data []byte) ([]byte, error) {
 	salt := sioutil.MustRandom(32)
 
 	// Derive an unique 256 bit key from the password and the random salt.
-	key := idKey([]byte(password), salt, nil, nil, 32)
+	key := generateHash([]byte(password), salt)
 
 	var (
 		id     byte
@@ -110,7 +103,8 @@ func DecryptData(password string, data io.Reader) ([]byte, error) {
 		return nil, err
 	}
 
-	key := idKey([]byte(password), salt[:], nil, nil, 32)
+	key := generateHash([]byte(password), salt[:])
+
 	var (
 		err    error
 		stream *sio.Stream
